@@ -1,0 +1,4 @@
+interface:
+  display_name: "DS 视觉桥"
+  short_description: "多通道识图：GLM/custom/OCR/文档/本地，给 DeepSeek 装眼睛"
+  default_prompt: "用 $ds-vision-skill 看看这张图片里有什么"
