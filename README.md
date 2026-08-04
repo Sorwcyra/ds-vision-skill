@@ -1,6 +1,6 @@
-# DS Vision Skill
+# ds-vision-skill
 
-DS Vision Skill 是一个给纯文本推理模型补充视觉能力的 Codex/DeepSeek skill。它会把图片、截图、扫描件、PDF、图表、UI 截图等视觉输入，转换成文本或标准 JSON，再交给主模型继续分析。
+ds-vision-skill 是一个给纯文本推理模型补充视觉能力的 Codex/DeepSeek skill。它会把图片、截图、扫描件、PDF、图表、UI 截图等视觉输入，转换成文本或标准 JSON，再交给主模型继续分析。
 
 适合这些场景：
 
