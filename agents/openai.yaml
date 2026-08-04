@@ -1,0 +1,4 @@
+interface:
+  display_name: "DS Vision Skill"
+  short_description: "多通道视觉增强：图片理解、OCR、PDF/文档解析、本地兜底。"
+  default_prompt: "使用 $ds-vision-skill 分析这个视觉输入。"
