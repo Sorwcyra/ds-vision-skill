@@ -1,4 +1,4 @@
-# vision-router.ps1 - Single entry point for ds-vision-skill.
+﻿# vision-router.ps1 - Single entry point for ds-vision-skill.
 # ASCII-only source. Pass non-ASCII user prompts through -Prompt.
 
 param(
@@ -73,7 +73,7 @@ $imageExts = @('.png','.jpg','.jpeg','.webp','.gif','.bmp','.tif','.tiff')
 if ($Intent -eq 'auto') {
     if ($ext -in $documentExts) { $Intent = 'document' }
     elseif ($ext -in $imageExts) {
-        if ($Prompt -match '(?i)\bocr\b|文字|识别|提取|票据|发票|扫描') { $Intent = 'ocr' }
+        if ($Prompt -match '(?i)\bocr\b|鏂囧瓧|璇嗗埆|鎻愬彇|绁ㄦ嵁|鍙戠エ|鎵弿') { $Intent = 'ocr' }
         else { $Intent = 'reason' }
     } else {
         $Intent = 'document'
@@ -132,8 +132,14 @@ if ($Intent -eq 'ocr') {
 
 if ($Intent -eq 'reason') {
     $vlm = Join-Path $scriptDir 'vlm-vision.ps1'
-    $baseArgs = @('-ImagePath', $Path, '-Prompt', $Prompt, '-Json')
-    if ($NoCache) { $baseArgs += '-NoCache' }
+    # PS 5.1: array splatting to a .ps1 script misbinds name/value sequences.
+    # Use hashtable splatting instead, which is reliable across versions.
+    $baseArgs = @{
+        ImagePath = $Path
+        Prompt    = $Prompt
+        Json      = $true
+    }
+    if ($NoCache) { $baseArgs['NoCache'] = $true }
 
     $channels = @()
     if ($Complex) { $channels += 'glm-thinking' } else { $channels += 'glm' }
@@ -143,7 +149,9 @@ if ($Intent -eq 'reason') {
 
     foreach ($ch in $channels) {
         if (($ch -eq 'glm' -or $ch -eq 'glm-thinking') -and -not (Get-EnvValue 'GLM_API_KEY')) { continue }
-        $attempts += Run-Step $ch { & $vlm @baseArgs -Channel $ch }
+        $callArgs = $baseArgs.Clone()
+        $callArgs['Channel'] = $ch
+        $attempts += Run-Step $ch { & $vlm @callArgs }
         if ($attempts[-1].code -eq 0) { Write-Output $attempts[-1].text; exit 0 }
     }
 }

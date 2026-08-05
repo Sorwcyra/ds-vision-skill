@@ -1,4 +1,4 @@
-# windows-ocr.ps1 - Offline OCR via Windows WinRT OcrEngine (no network).
+﻿# windows-ocr.ps1 - Offline OCR via Windows WinRT OcrEngine (no network).
 # ASCII-only source.
 
 param(
@@ -73,3 +73,4 @@ if ($Json) {
 } else {
     foreach ($l in $lines) { Write-Output $l }
 }
+exit 0

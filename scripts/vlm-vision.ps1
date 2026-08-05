@@ -1,4 +1,4 @@
-# vlm-vision.ps1 - Generic OpenAI-compatible vision caller for ds-vision-skill.
+﻿# vlm-vision.ps1 - Generic OpenAI-compatible vision caller for ds-vision-skill.
 # ASCII-only source. Pass Chinese text via -Prompt; never embed non-ASCII here.
 # Exit codes: 0 success, 1 generic, 2 missing key/auth, 3 rate-limited, 4 network, 5 request rejected.
 
@@ -121,8 +121,8 @@ if (-not $NoCache -and (Test-Path -LiteralPath $cacheFile)) {
 
 # --- resolve key ---
 $resolvedKey = $ApiKey
-if (-not $resolvedKey) { $resolvedKey = $channelKeys[$Channel] }
-if (-not $resolvedKey) {
+if (-not $resolvedKey -and $Channel -ne 'local') { $resolvedKey = $channelKeys[$Channel] }
+if (-not $resolvedKey -and $Channel -ne 'local') {
     Write-Err "ERROR: API key missing for channel '$Channel'. Set the env var or pass -ApiKey."
     exit 2
 }
@@ -151,7 +151,13 @@ $body = @{ model = $resolvedModel; messages = @(@{ role = 'user'; content = $con
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 try {
-    $r = Invoke-RestMethod -Uri $chatUrl -Method Post -Headers @{ Authorization = "Bearer $resolvedKey" } -ContentType 'application/json; charset=utf-8' -Body $body -TimeoutSec $TimeoutSec
+    $headers = if ($resolvedKey) { @{ Authorization = "Bearer $resolvedKey" } } else { @{} }
+    # PS 5.1 Invoke-RestMethod decodes UTF-8 responses using the system codepage,
+    # which garbles CJK text. Read raw bytes and decode as UTF-8 explicitly.
+    $resp = Invoke-WebRequest -Uri $chatUrl -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $body -TimeoutSec $TimeoutSec -UseBasicParsing
+    $respStream = $resp.RawContentStream
+    $respReader = New-Object System.IO.StreamReader($respStream, [System.Text.Encoding]::UTF8)
+    $r = $respReader.ReadToEnd() | ConvertFrom-Json
     $sw.Stop()
     if ($r.choices -and $r.choices[0].message.content) {
         $content = $r.choices[0].message.content
