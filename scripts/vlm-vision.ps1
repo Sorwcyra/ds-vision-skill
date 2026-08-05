@@ -131,8 +131,8 @@ if (-not $NoCache -and (Test-Path -LiteralPath $cacheFile)) {
 
 # --- resolve key ---
 $resolvedKey = $ApiKey
-if (-not $resolvedKey) { $resolvedKey = $channelKeys[$Channel] }
-if (-not $resolvedKey) {
+if (-not $resolvedKey -and $Channel -ne 'local') { $resolvedKey = $channelKeys[$Channel] }
+if (-not $resolvedKey -and $Channel -ne 'local') {
     Write-Err "ERROR: API key missing for channel '$Channel'. Set the env var or pass -ApiKey."
     exit 2
 }
@@ -161,7 +161,18 @@ $body = @{ model = $resolvedModel; messages = @(@{ role = 'user'; content = $con
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 try {
-    $r = Invoke-RestMethod -Uri $chatUrl -Method Post -Headers @{ Authorization = "Bearer $resolvedKey" } -ContentType 'application/json; charset=utf-8' -Body $body -TimeoutSec $TimeoutSec
+    $headers = if ($resolvedKey) { @{ Authorization = "Bearer $resolvedKey" } } else { @{} }
+    # PS 5.1 can decode UTF-8 JSON as the system codepage when servers omit a charset.
+    # Read response bytes explicitly to keep CJK output intact.
+    $resp = Invoke-WebRequest -Uri $chatUrl -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $body -TimeoutSec $TimeoutSec -UseBasicParsing
+    if ($resp.RawContentStream) {
+        if ($resp.RawContentStream.CanSeek) { $resp.RawContentStream.Position = 0 }
+        $reader = New-Object System.IO.StreamReader($resp.RawContentStream, [System.Text.Encoding]::UTF8)
+        $responseText = $reader.ReadToEnd()
+    } else {
+        $responseText = [string]$resp.Content
+    }
+    $r = $responseText | ConvertFrom-Json
     $sw.Stop()
     if ($r.choices -and $r.choices[0].message.content) {
         $content = $r.choices[0].message.content
