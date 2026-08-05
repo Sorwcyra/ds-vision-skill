@@ -73,7 +73,7 @@ scripts\vlm-vision.ps1 -ImagePath <test.png> -Prompt "describe this image in one
 
 ## 路由优先级
 
-- 图片理解：`glm -> glm-thinking -> agnes-2.5-flash -> agnes-2.0-flash -> custom -> local`
-- 复杂视觉推理：`glm-thinking -> agnes-2.5-flash -> agnes-2.0-flash -> custom -> local`
+- 图片理解：`race(glm, glm-thinking, agnes-2.5-flash, agnes-2.0-flash) -> custom -> local`
+- 复杂视觉推理：`race(glm, glm-thinking, agnes-2.5-flash, agnes-2.0-flash) -> custom -> local`
 - 文档解析：`mineru flash -> mineru extract`
 - OCR：`baidu-ocr -> windows-ocr -> vision reasoning`

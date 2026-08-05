@@ -47,6 +47,62 @@ function Run-Step([string]$Name, [scriptblock]$Command) {
     }
 }
 
+function Run-Race([string]$ScriptPath, [array]$ChannelNames, [string]$InputPath, [string]$UserPrompt, [bool]$DisableCache) {
+    $jobs = @()
+    foreach ($name in $ChannelNames) {
+        $jobs += Start-Job -Name ("ds-vision-" + $name) -ArgumentList $ScriptPath, $name, $InputPath, $UserPrompt, $DisableCache -ScriptBlock {
+            param($VlmScript, $ChannelName, $JobImagePath, $JobPrompt, $JobNoCache)
+            if ($JobNoCache) {
+                $output = & $VlmScript -ImagePath $JobImagePath -Prompt $JobPrompt -Json -NoCache -Channel $ChannelName 2>&1
+            } else {
+                $output = & $VlmScript -ImagePath $JobImagePath -Prompt $JobPrompt -Json -Channel $ChannelName 2>&1
+            }
+            [pscustomobject]@{
+                name = $ChannelName
+                code = $LASTEXITCODE
+                text = (($output | Out-String).Trim())
+            }
+        }
+    }
+
+    $pending = @($jobs)
+    $results = @()
+    try {
+        while ($pending.Count -gt 0) {
+            $finished = Wait-Job -Job $pending -Any -Timeout 1
+            if (-not $finished) { continue }
+            foreach ($job in @($finished)) {
+                $result = Receive-Job -Job $job
+                if ($result) {
+                    $results += $result
+                    if ($result.code -eq 0) {
+                        foreach ($other in @($pending | Where-Object { $_.Id -ne $job.Id })) {
+                            Stop-Job -Job $other -ErrorAction SilentlyContinue
+                        }
+                        return [pscustomobject]@{
+                            success = $true
+                            winner  = $result
+                            attempts = $results
+                        }
+                    }
+                }
+                $pending = @($pending | Where-Object { $_.Id -ne $job.Id })
+            }
+        }
+    } finally {
+        foreach ($job in $jobs) {
+            Stop-Job -Job $job -ErrorAction SilentlyContinue
+            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    return [pscustomobject]@{
+        success = $false
+        winner  = $null
+        attempts = $results
+    }
+}
+
 function Emit-FallbackResult([string]$TaskType, [string]$Tool, [string]$Result, [array]$Attempts) {
     if ($Json) {
         [ordered]@{
@@ -135,19 +191,27 @@ if ($Intent -eq 'reason') {
     $baseArgs = @('-ImagePath', $Path, '-Prompt', $Prompt, '-Json')
     if ($NoCache) { $baseArgs += '-NoCache' }
 
-    $channels = @()
-    if ($Complex) { $channels += 'glm-thinking' } else { $channels += 'glm' }
-    if ($channels -notcontains 'glm-thinking') { $channels += 'glm-thinking' }
-    if (Get-EnvValue 'AGNES_API_KEY') {
-        $channels += 'agnes-2.5-flash'
-        $channels += 'agnes-2.0-flash'
+    $raceChannels = @()
+    if (Get-EnvValue 'GLM_API_KEY') {
+        $raceChannels += 'glm'
+        $raceChannels += 'glm-thinking'
     }
+    if (Get-EnvValue 'AGNES_API_KEY') {
+        $raceChannels += 'agnes-2.5-flash'
+        $raceChannels += 'agnes-2.0-flash'
+    }
+
+    if ($raceChannels.Count -gt 0) {
+        $race = Run-Race $vlm $raceChannels $Path $Prompt ([bool]$NoCache)
+        $attempts += @($race.attempts)
+        if ($race.success) { Write-Output $race.winner.text; exit 0 }
+    }
+
+    $channels = @()
     if ((Get-EnvValue 'VISION_CUSTOM_API_KEY') -and (Get-EnvValue 'VISION_CUSTOM_BASE_URL') -and (Get-EnvValue 'VISION_CUSTOM_MODEL')) { $channels += 'custom' }
     if ((Test-PortOpen 11434) -or (Test-PortOpen 1234) -or (Test-PortOpen 8080)) { $channels += 'local' }
 
     foreach ($ch in $channels) {
-        if (($ch -eq 'glm' -or $ch -eq 'glm-thinking') -and -not (Get-EnvValue 'GLM_API_KEY')) { continue }
-        if (($ch -eq 'agnes-2.5-flash' -or $ch -eq 'agnes-2.0-flash') -and -not (Get-EnvValue 'AGNES_API_KEY')) { continue }
         $attempts += Run-Step $ch { & $vlm @baseArgs -Channel $ch }
         if ($attempts[-1].code -eq 0) { Write-Output $attempts[-1].text; exit 0 }
     }

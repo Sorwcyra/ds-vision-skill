@@ -109,6 +109,6 @@ if ($data.notes.agnes_base_override) { Write-Output ("- agnes endpoint override:
 if ($data.notes.custom_configured) { Write-Output ("- custom endpoint: {0} model={1}" -f (Get-EnvValue 'VISION_CUSTOM_BASE_URL'), (Get-EnvValue 'VISION_CUSTOM_MODEL')) }
 Write-Output ''
 Write-Output '### Category routing (first available)'
-Write-Output '- image_reasoning: glm (simple) -> glm-thinking (complex) -> agnes-2.5-flash -> agnes-2.0-flash -> custom -> local'
+Write-Output '- image_reasoning: race(glm, glm-thinking, agnes-2.5-flash, agnes-2.0-flash) -> custom -> local'
 Write-Output '- document_parsing: mineru flash -> mineru extract'
 Write-Output '- ocr: baidu-ocr -> windows-ocr (local) -> mineru'

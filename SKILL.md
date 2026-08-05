@@ -1,7 +1,7 @@
 ---
 name: ds-vision-skill
 metadata:
-  version: 0.2.0
+  version: 0.3.0
   repository: https://github.com/Sorwcyra/ds-vision-skill
 description: >
   为纯文本推理模型补充视觉能力。用户提供图片、截图、照片、图表、UI 截图、代码截图、数学题图片、
@@ -34,13 +34,13 @@ scripts/vision-router.ps1 -Path <file> -Prompt "<user request>" -Intent auto -Js
 ## 路由规则
 
 1. PDF、论文、报告、长文档、多页扫描件：使用 `scripts/mineru-extract.ps1 -FilePath <file> -Mode flash -Json`。如果配置了 `MINERU_TOKEN` 且 flash 失败，再尝试 `-Mode extract`。
-2. 图片且需要理解/推理：使用 `scripts/vlm-vision.ps1`。简单任务走 `glm`，复杂图表、数学、UI/代码截图、密集信息图走 `glm-thinking`；如果配置了 Agnes，则继续降级到 `agnes-2.5-flash` 和 `agnes-2.0-flash`。
+2. 图片且需要理解/推理：使用 `scripts/vision-router.ps1` 并发调用已配置的免费云视觉通道：`glm`、`glm-thinking`、`agnes-2.5-flash`、`agnes-2.0-flash`；谁先成功返回就采用谁的结果。如果全部失败，再降级到 custom/local。
 3. 图片且只要文字：优先 `scripts/baidu-ocr.ps1 -ImagePath <file> -Json`；未配置或失败时用 `scripts/windows-ocr.ps1 -ImagePath <file> -Json`。
 4. 无法判断时：使用 `vision-router.ps1 -Intent auto -Complex -Json`。
 
 ## 降级链
 
-- 视觉理解：`glm -> glm-thinking -> agnes-2.5-flash -> agnes-2.0-flash -> custom -> local`。
+- 视觉理解：`race(glm, glm-thinking, agnes-2.5-flash, agnes-2.0-flash) -> custom -> local`。
 - 文档解析：`mineru flash -> mineru extract`。
 - OCR：`baidu-ocr -> windows-ocr -> vision reasoning`。
 - 同一通道遇到 401、403、429、网络错误或空结果时，不要反复重试；直接切换下一通道。

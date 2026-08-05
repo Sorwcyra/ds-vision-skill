@@ -17,7 +17,7 @@ flowchart TD
     B --> C{"任务类型"}
     C -->|文档 / PDF| D["MinerU<br/>flash -> extract"]
     C -->|纯文字识别| E["OCR<br/>Baidu -> Windows OCR"]
-    C -->|视觉理解 / 推理| F["VLM<br/>GLM -> GLM Thinking -> Agnes -> custom -> local"]
+    C -->|视觉理解 / 推理| F["VLM<br/>race(GLM + Agnes) -> custom -> local"]
     D --> G["标准 JSON Envelope"]
     E --> G
     F --> G
@@ -122,6 +122,8 @@ scripts\setup.ps1 -RemoveKey -Channel <glm|glm-thinking|agnes-2.5-flash|agnes-2.
 | `windows-ocr` | 本地 OCR | 无 | 隐私优先、离线兜底 |
 | `mineru` | PDF/文档解析 | `MINERU_TOKEN` 可选 | flash 模式优先 |
 | `local` | 本地视觉模型 | `VISION_LOCAL_MODEL` 可选 | Ollama/LM Studio/llama.cpp |
+
+图片理解默认会并发调用已配置的免费云通道：`glm`、`glm-thinking`、`agnes-2.5-flash`、`agnes-2.0-flash`。谁先成功返回，就采用谁的结果；全部失败后再降级到 `custom` 和 `local`。
 
 ## 输出格式
 

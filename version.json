@@ -1,10 +1,10 @@
 {
   "name": "ds-vision-skill",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "updated": "2026-08-05",
   "repository": "https://github.com/Sorwcyra/ds-vision-skill",
   "release_notes": [
-    "Added built-in Agnes vision channels for agnes-2.5-flash and agnes-2.0-flash.",
-    "Set the default Agnes endpoint so users only need AGNES_API_KEY."
+    "Run free cloud vision channels concurrently and use the first successful response.",
+    "Race glm, glm-thinking, agnes-2.5-flash, and agnes-2.0-flash when their keys are configured."
   ]
 }
