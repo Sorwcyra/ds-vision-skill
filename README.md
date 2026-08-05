@@ -17,7 +17,7 @@ flowchart TD
     B --> C{"任务类型"}
     C -->|文档 / PDF| D["MinerU<br/>flash -> extract"]
     C -->|纯文字识别| E["OCR<br/>Baidu -> Windows OCR"]
-    C -->|视觉理解 / 推理| F["VLM<br/>GLM -> GLM Thinking -> custom -> local"]
+    C -->|视觉理解 / 推理| F["VLM<br/>GLM -> GLM Thinking -> Agnes -> custom -> local"]
     D --> G["标准 JSON Envelope"]
     E --> G
     F --> G
@@ -34,7 +34,7 @@ agents/openai.yaml
 references/channels.md
 scripts/
   vision-router.ps1      # 推荐入口：自动判断任务并降级
-  vlm-vision.ps1         # 视觉理解/推理：glm / glm-thinking / custom / local
+  vlm-vision.ps1         # 视觉理解/推理：glm / glm-thinking / agnes / custom / local
   baidu-ocr.ps1          # 百度 OCR，带 token 缓存
   windows-ocr.ps1        # Windows 离线 OCR
   mineru-extract.ps1     # MinerU 文档解析，带结果缓存
@@ -96,10 +96,17 @@ OpenAI 兼容自定义中转：
 scripts\setup.ps1 -SetCustom -BaseUrl <url> -Key <key> -Model <model> -Verify
 ```
 
+Agnes 视觉模型：
+
+```powershell
+scripts\setup.ps1 -SetKey -Channel agnes-2.5-flash -Key <AGNES_API_KEY> -Verify
+scripts\setup.ps1 -SetKey -Channel agnes-2.0-flash -Key <AGNES_API_KEY> -Verify
+```
+
 移除配置：
 
 ```powershell
-scripts\setup.ps1 -RemoveKey -Channel <glm|glm-thinking|baidu-ocr|custom>
+scripts\setup.ps1 -RemoveKey -Channel <glm|glm-thinking|agnes-2.5-flash|agnes-2.0-flash|baidu-ocr|custom>
 ```
 
 ## 通道说明
@@ -108,6 +115,8 @@ scripts\setup.ps1 -RemoveKey -Channel <glm|glm-thinking|baidu-ocr|custom>
 |---|---|---|---|
 | `glm` | 简单图片理解 | `GLM_API_KEY` | 默认快路径 |
 | `glm-thinking` | 复杂视觉推理 | `GLM_API_KEY` | 图表、数学、复杂 UI |
+| `agnes-2.5-flash` | Agnes 快速视觉理解 | `AGNES_API_KEY` | 默认 `https://api.agnes-ai.cn/v1/chat/completions` |
+| `agnes-2.0-flash` | Agnes 备用快速视觉理解 | `AGNES_API_KEY` | 默认 `https://api.agnes-ai.cn/v1/chat/completions` |
 | `custom` | OpenAI 兼容中转 | `VISION_CUSTOM_*` | 私有或第三方服务 |
 | `baidu-ocr` | 云端 OCR | `BAIDU_API_KEY` + `BAIDU_SECRET_KEY` | token 自动缓存 |
 | `windows-ocr` | 本地 OCR | 无 | 隐私优先、离线兜底 |

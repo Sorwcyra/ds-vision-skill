@@ -5,7 +5,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$ImagePath,
     [string]$Prompt = 'Describe this image in detail.',
-    [ValidateSet('glm','glm-thinking','custom','local')]
+    [ValidateSet('glm','glm-thinking','agnes-2.5-flash','agnes-2.0-flash','custom','local')]
     [string]$Channel = 'glm',
     [string]$Model = '',
     [string]$BaseUrl = '',
@@ -37,12 +37,16 @@ if (-not (Test-Path -LiteralPath $ImagePath)) {
 $channelKeys = @{
     glm           = Get-EnvValue 'GLM_API_KEY'
     'glm-thinking' = Get-EnvValue 'GLM_API_KEY'
+    'agnes-2.5-flash' = Get-EnvValue 'AGNES_API_KEY'
+    'agnes-2.0-flash' = Get-EnvValue 'AGNES_API_KEY'
     custom        = Get-EnvValue 'VISION_CUSTOM_API_KEY'
 }
 
 $channelDefaults = @{
     glm           = @{ url = 'https://open.bigmodel.cn/api/paas/v4/chat/completions'; model = 'glm-4v-flash' }
     'glm-thinking' = @{ url = 'https://open.bigmodel.cn/api/paas/v4/chat/completions'; model = 'glm-4.1v-thinking-flash' }
+    'agnes-2.5-flash' = @{ url = if (Get-EnvValue 'AGNES_BASE_URL') { Get-EnvValue 'AGNES_BASE_URL' } else { 'https://api.agnes-ai.cn/v1/chat/completions' }; model = 'agnes-2.5-flash' }
+    'agnes-2.0-flash' = @{ url = if (Get-EnvValue 'AGNES_BASE_URL') { Get-EnvValue 'AGNES_BASE_URL' } else { 'https://api.agnes-ai.cn/v1/chat/completions' }; model = 'agnes-2.0-flash' }
     custom        = @{ url = Get-EnvValue 'VISION_CUSTOM_BASE_URL'; model = Get-EnvValue 'VISION_CUSTOM_MODEL' }
 }
 

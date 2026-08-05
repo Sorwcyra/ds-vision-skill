@@ -138,11 +138,16 @@ if ($Intent -eq 'reason') {
     $channels = @()
     if ($Complex) { $channels += 'glm-thinking' } else { $channels += 'glm' }
     if ($channels -notcontains 'glm-thinking') { $channels += 'glm-thinking' }
+    if (Get-EnvValue 'AGNES_API_KEY') {
+        $channels += 'agnes-2.5-flash'
+        $channels += 'agnes-2.0-flash'
+    }
     if ((Get-EnvValue 'VISION_CUSTOM_API_KEY') -and (Get-EnvValue 'VISION_CUSTOM_BASE_URL') -and (Get-EnvValue 'VISION_CUSTOM_MODEL')) { $channels += 'custom' }
     if ((Test-PortOpen 11434) -or (Test-PortOpen 1234) -or (Test-PortOpen 8080)) { $channels += 'local' }
 
     foreach ($ch in $channels) {
         if (($ch -eq 'glm' -or $ch -eq 'glm-thinking') -and -not (Get-EnvValue 'GLM_API_KEY')) { continue }
+        if (($ch -eq 'agnes-2.5-flash' -or $ch -eq 'agnes-2.0-flash') -and -not (Get-EnvValue 'AGNES_API_KEY')) { continue }
         $attempts += Run-Step $ch { & $vlm @baseArgs -Channel $ch }
         if ($attempts[-1].code -eq 0) { Write-Output $attempts[-1].text; exit 0 }
     }

@@ -1,9 +1,10 @@
 {
   "name": "ds-vision-skill",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "updated": "2026-08-05",
   "repository": "https://github.com/Sorwcyra/ds-vision-skill",
   "release_notes": [
-    "Initial public version with vision routing, OCR, document parsing, setup, and smoke-test scripts."
+    "Added built-in Agnes vision channels for agnes-2.5-flash and agnes-2.0-flash.",
+    "Set the default Agnes endpoint so users only need AGNES_API_KEY."
   ]
 }

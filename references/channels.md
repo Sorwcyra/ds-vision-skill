@@ -8,6 +8,8 @@
 |---|---|---|---|---|---|
 | `glm` | 简单视觉理解 | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | `glm-4v-flash` | `GLM_API_KEY` | 快路径 |
 | `glm-thinking` | 复杂视觉推理 | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | `glm-4.1v-thinking-flash` | `GLM_API_KEY` | 图表、数学、复杂 UI |
+| `agnes-2.5-flash` | 快速视觉理解 | `https://api.agnes-ai.cn/v1/chat/completions` | `agnes-2.5-flash` | `AGNES_API_KEY` | OpenAI 兼容接口，可用 `AGNES_BASE_URL` 覆盖 |
+| `agnes-2.0-flash` | 备用快速视觉理解 | `https://api.agnes-ai.cn/v1/chat/completions` | `agnes-2.0-flash` | `AGNES_API_KEY` | OpenAI 兼容接口，可用 `AGNES_BASE_URL` 覆盖 |
 | `custom` | OpenAI 兼容中转 | `VISION_CUSTOM_BASE_URL` | `VISION_CUSTOM_MODEL` | `VISION_CUSTOM_API_KEY` | 私有或第三方服务 |
 
 ## OCR 通道
@@ -44,6 +46,7 @@ scripts\local-select.ps1 -Force
 scripts\setup.ps1 -Status
 scripts\setup.ps1 -Help
 scripts\setup.ps1 -SetKey -Channel glm -Key <key> -Verify
+scripts\setup.ps1 -SetKey -Channel agnes-2.5-flash -Key <key> -Verify
 scripts\setup.ps1 -SetKey -Channel baidu-ocr -Key <ak> -Secret <sk> -Verify
 scripts\setup.ps1 -SetCustom -BaseUrl <url> -Key <key> -Model <model> -Verify
 scripts\setup.ps1 -RemoveKey -Channel <name|custom>
@@ -54,7 +57,7 @@ scripts\setup.ps1 -RemoveKey -Channel <name|custom>
 每个云端视觉通道可用一张小测试图验证：
 
 ```powershell
-scripts\vlm-vision.ps1 -ImagePath <test.png> -Prompt "describe this image in one sentence" -Channel <glm|glm-thinking|custom>
+scripts\vlm-vision.ps1 -ImagePath <test.png> -Prompt "describe this image in one sentence" -Channel <glm|glm-thinking|agnes-2.5-flash|agnes-2.0-flash|custom>
 ```
 
 常见退出码：
@@ -70,7 +73,7 @@ scripts\vlm-vision.ps1 -ImagePath <test.png> -Prompt "describe this image in one
 
 ## 路由优先级
 
-- 图片理解：`glm -> glm-thinking -> custom -> local`
-- 复杂视觉推理：`glm-thinking -> custom -> local`
+- 图片理解：`glm -> glm-thinking -> agnes-2.5-flash -> agnes-2.0-flash -> custom -> local`
+- 复杂视觉推理：`glm-thinking -> agnes-2.5-flash -> agnes-2.0-flash -> custom -> local`
 - 文档解析：`mineru flash -> mineru extract`
 - OCR：`baidu-ocr -> windows-ocr -> vision reasoning`

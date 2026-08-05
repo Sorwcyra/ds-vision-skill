@@ -5,7 +5,7 @@
 # Usage:
 #   setup.ps1 -Status
 #   setup.ps1 -Help
-#   setup.ps1 -SetKey -Channel <ch> -Key <value> [-Secret <value>] [-Verify] [-Force]
+#   setup.ps1 -SetKey -Channel <ch> -Key <value> [-Secret <value>] [-BaseUrl <url>] [-Verify] [-Force]
 #   setup.ps1 -RemoveKey -Channel <ch|custom>
 #   setup.ps1 -SetCustom -BaseUrl <url> -Key <value> -Model <model> [-Verify] [-Force]
 #   setup.ps1 -Verify -Channel <ch> [-ImagePath <path>]
@@ -18,7 +18,7 @@ param(
     [switch]$SetCustom,
     [switch]$Verify,
     [switch]$Force,
-    [ValidateSet('glm','glm-thinking','baidu-ocr','custom')]
+    [ValidateSet('glm','glm-thinking','agnes-2.5-flash','agnes-2.0-flash','baidu-ocr','custom')]
     [string]$Channel = '',
     [string]$Key = '',
     [string]$Secret = '',
@@ -68,6 +68,8 @@ function Test-Port([int]$Port) {
 $channels = @{
     glm           = @{ envs = @('GLM_API_KEY'); name = 'Zhipu GLM-4V-Flash (simple, free)'; signup = 'https://open.bigmodel.cn/' }
     'glm-thinking' = @{ envs = @('GLM_API_KEY'); name = 'Zhipu GLM-4.1V-Thinking-Flash (complex)'; signup = 'https://open.bigmodel.cn/' }
+    'agnes-2.5-flash' = @{ envs = @('AGNES_API_KEY'); name = 'Agnes 2.5 Flash (OpenAI-compatible vision)'; signup = 'https://api.agnes-ai.cn/v1/chat/completions' }
+    'agnes-2.0-flash' = @{ envs = @('AGNES_API_KEY'); name = 'Agnes 2.0 Flash (OpenAI-compatible vision)'; signup = 'https://api.agnes-ai.cn/v1/chat/completions' }
     'baidu-ocr'   = @{ envs = @('BAIDU_API_KEY','BAIDU_SECRET_KEY'); name = 'Baidu OCR (general/accurate)'; signup = 'https://console.bce.baidu.com/ai/#/ai/ocr/app/list' }
 }
 
@@ -115,6 +117,7 @@ function Show-Status {
     }
     $customOk = (Get-EnvValue 'VISION_CUSTOM_API_KEY') -and (Get-EnvValue 'VISION_CUSTOM_BASE_URL') -and (Get-EnvValue 'VISION_CUSTOM_MODEL')
     Write-Output ("- custom [relay/private]: {0}" -f $(if ($customOk) { 'configured' } else { 'dormant' }))
+    Write-Output ("- agnes base url: {0}" -f $(if (Get-EnvValue 'AGNES_BASE_URL') { Get-EnvValue 'AGNES_BASE_URL' } else { 'https://api.agnes-ai.cn/v1/chat/completions (default)' }))
     Write-Output ''
     Write-Output '### Local'
     Write-Output ("- llmfit: {0}" -f $(if (Get-Command llmfit -ErrorAction SilentlyContinue) { 'OK' } else { 'not found (uv tool install llmfit)' }))
@@ -135,7 +138,8 @@ function Show-Help {
         Write-Output ("### {0} ({1})" -f $c, $info.name)
         Write-Output ("- Sign up: {0}" -f $info.signup)
         Write-Output ("- Env vars: {0}" -f ($info.envs -join ' + '))
-        Write-Output ("- Enable: setup.ps1 -SetKey -Channel {0} -Key <key>{1} -Verify" -f $c, $secret)
+        $base = if ($c -like 'agnes-*') { ' [-BaseUrl <url>]' } else { '' }
+        Write-Output ("- Enable: setup.ps1 -SetKey -Channel {0} -Key <key>{1}{2} -Verify" -f $c, $secret, $base)
         Write-Output ''
     }
     Write-Output '### custom (relay / private endpoint)'
@@ -150,11 +154,12 @@ function Show-Help {
 
 function Do-SetKey {
     if (-not $Channel -or $Channel -eq 'custom') {
-        Write-Error 'SetKey requires -Channel glm|glm-thinking|baidu-ocr (use -SetCustom for the custom relay).'
+        Write-Error 'SetKey requires -Channel glm|glm-thinking|agnes-2.5-flash|agnes-2.0-flash|baidu-ocr (use -SetCustom for the custom relay).'
         exit 1
     }
     $info = $channels[$Channel]
     if (-not $Key) { Write-Error '-Key is required.'; exit 1 }
+    if ($Channel -like 'agnes-*' -and $BaseUrl) { Set-Item -Path 'Env:AGNES_BASE_URL' -Value $BaseUrl }
     if ($info.envs.Count -gt 1 -and -not $Secret) {
         Write-Error ("{0} also requires -Secret ({1})." -f $Channel, $info.envs[1])
         exit 1
@@ -174,6 +179,10 @@ function Do-SetKey {
         $value = if ($i -eq 0) { $Key } else { $Secret }
         Set-EnvUser $info.envs[$i] $value
         Write-Output ("Saved {0}={1} (User scope)" -f $info.envs[$i], (Mask $value))
+    }
+    if ($Channel -like 'agnes-*' -and $BaseUrl) {
+        Set-EnvUser 'AGNES_BASE_URL' $BaseUrl
+        Write-Output ("Saved AGNES_BASE_URL={0} (User scope)" -f $BaseUrl)
     }
     if ($Verify) { Write-Output 'Verification: OK' }
 }
@@ -225,7 +234,7 @@ if ($primaryCount -ne 1 -and -not ($primaryCount -eq 0 -and $Verify)) {
     Write-Output 'Usage:'
     Write-Output '  setup.ps1 -Status'
     Write-Output '  setup.ps1 -Help'
-    Write-Output '  setup.ps1 -SetKey -Channel <ch> -Key <value> [-Secret <value>] [-Verify] [-Force]'
+    Write-Output '  setup.ps1 -SetKey -Channel <ch> -Key <value> [-Secret <value>] [-BaseUrl <url>] [-Verify] [-Force]'
     Write-Output '  setup.ps1 -RemoveKey -Channel <ch|custom>'
     Write-Output '  setup.ps1 -SetCustom -BaseUrl <url> -Key <value> -Model <model> [-Verify] [-Force]'
     Write-Output '  setup.ps1 -Verify -Channel <ch> [-ImagePath <path>]'

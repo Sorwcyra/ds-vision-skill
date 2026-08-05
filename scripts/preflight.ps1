@@ -45,6 +45,8 @@ $ports = [ordered]@{
 $channels = [ordered]@{
     'glm (4V-Flash simple)'                  = 'GLM_API_KEY'
     'glm-thinking (4.1V-Thinking complex)'   = 'GLM_API_KEY'
+    'agnes-2.5-flash'                        = 'AGNES_API_KEY'
+    'agnes-2.0-flash'                        = 'AGNES_API_KEY'
     'baidu-ocr (general/accurate)'           = 'BAIDU_API_KEY'
     'custom relay'                           = 'VISION_CUSTOM_API_KEY'
 }
@@ -67,10 +69,11 @@ $data = [ordered]@{
     cloud_channels = $cloud
     notes = [ordered]@{
         baidu_secret_missing = [bool]((Get-EnvValue 'BAIDU_API_KEY') -and -not (Get-EnvValue 'BAIDU_SECRET_KEY'))
+        agnes_base_override   = [bool](Get-EnvValue 'AGNES_BASE_URL')
         custom_configured    = [bool]((Get-EnvValue 'VISION_CUSTOM_API_KEY') -and (Get-EnvValue 'VISION_CUSTOM_BASE_URL') -and (Get-EnvValue 'VISION_CUSTOM_MODEL'))
     }
     routing = [ordered]@{
-        image_reasoning  = @('glm','glm-thinking','custom','local')
+        image_reasoning  = @('glm','glm-thinking','agnes-2.5-flash','agnes-2.0-flash','custom','local')
         document_parsing = @('mineru flash','mineru extract')
         ocr              = @('baidu-ocr','windows-ocr','mineru')
     }
@@ -102,9 +105,10 @@ foreach ($name in $channels.Keys) {
     Write-Output ("- {0}: {1}" -f $name, $(if ($cloud[$name]) { 'OK (key set)' } else { 'dormant (no key)' }))
 }
 if ($data.notes.baidu_secret_missing) { Write-Output '- baidu-ocr note: BAIDU_API_KEY set but BAIDU_SECRET_KEY missing.' }
+if ($data.notes.agnes_base_override) { Write-Output ("- agnes endpoint override: {0}" -f (Get-EnvValue 'AGNES_BASE_URL')) }
 if ($data.notes.custom_configured) { Write-Output ("- custom endpoint: {0} model={1}" -f (Get-EnvValue 'VISION_CUSTOM_BASE_URL'), (Get-EnvValue 'VISION_CUSTOM_MODEL')) }
 Write-Output ''
 Write-Output '### Category routing (first available)'
-Write-Output '- image_reasoning: glm (simple) -> glm-thinking (complex) -> custom -> local'
+Write-Output '- image_reasoning: glm (simple) -> glm-thinking (complex) -> agnes-2.5-flash -> agnes-2.0-flash -> custom -> local'
 Write-Output '- document_parsing: mineru flash -> mineru extract'
 Write-Output '- ocr: baidu-ocr -> windows-ocr (local) -> mineru'
