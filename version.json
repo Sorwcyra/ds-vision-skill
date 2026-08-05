@@ -1,10 +1,11 @@
 {
   "name": "ds-vision-skill",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "updated": "2026-08-05",
   "repository": "https://github.com/Sorwcyra/ds-vision-skill",
   "release_notes": [
-    "Grouped GLM and Agnes as the first-run free race pool.",
-    "Added three third-party OpenAI-compatible slots: custom-1, custom-2, and custom-3."
+    "Changed auto image routing to prefer the free vision race pool by default.",
+    "Started Agnes race channels before GLM while keeping first-success concurrency.",
+    "Kept OCR available through explicit -Intent ocr or -AccurateOcr."
   ]
 }
