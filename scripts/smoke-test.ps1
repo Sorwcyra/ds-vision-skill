@@ -41,7 +41,7 @@ try {
 
 Write-Output ''
 Write-Output '### Docs'
-foreach ($doc in @('SKILL.md','README.md','references\channels.md','agents\openai.yaml')) {
+foreach ($doc in @('SKILL.md','README.md','VERSION','version.json','references\channels.md','agents\openai.yaml')) {
     $path = Join-Path $root $doc
     if (Test-Path -LiteralPath $path) {
         Write-Output ("- {0}: OK" -f $doc)
@@ -49,6 +49,22 @@ foreach ($doc in @('SKILL.md','README.md','references\channels.md','agents\opena
         $failed = $true
         Write-Output ("- {0}: FAIL (missing)" -f $doc)
     }
+}
+
+Write-Output ''
+Write-Output '### Version manifest'
+try {
+    $versionText = (Get-Content -Raw -LiteralPath (Join-Path $root 'VERSION')).Trim()
+    $manifest = Get-Content -Raw -LiteralPath (Join-Path $root 'version.json') | ConvertFrom-Json
+    if ($versionText -and $manifest.version -eq $versionText) {
+        Write-Output ("- VERSION matches version.json ({0}): OK" -f $versionText)
+    } else {
+        $failed = $true
+        Write-Output ("- VERSION matches version.json: FAIL (VERSION={0}, manifest={1})" -f $versionText, $manifest.version)
+    }
+} catch {
+    $failed = $true
+    Write-Output ("- version manifest: FAIL ({0})" -f $_.Exception.Message)
 }
 
 Write-Output ''

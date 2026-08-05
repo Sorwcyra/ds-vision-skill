@@ -145,3 +145,29 @@ scripts\setup.ps1 -RemoveKey -Channel <glm|glm-thinking|baidu-ocr|custom>
 ## 许可证
 
 MIT
+
+## Version and updates
+
+This skill is installed locally. GitHub changes do not automatically update a user's local copy.
+
+- Current version: see `VERSION` and `version.json`.
+- Check for updates without changing files:
+
+```powershell
+scripts\check-update.ps1
+scripts\check-update.ps1 -Json
+```
+
+- Show a non-blocking reminder at most once per day when a newer version exists:
+
+```powershell
+scripts\check-update.ps1 -Notify
+```
+
+- Update only when this skill directory is a git clone and has no local changes:
+
+```powershell
+scripts\update-skill.ps1
+```
+
+If the skill was installed by copying/downloading rather than `git clone`, reinstall it from GitHub instead of overwriting the local directory.
