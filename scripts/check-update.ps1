@@ -68,20 +68,24 @@ function Save-NotifyCache([string]$LatestVersion) {
 
 $root = Split-Path -Parent $PSScriptRoot
 $localVersion = Read-LocalVersion $root
-$rawUrl = "https://raw.githubusercontent.com/$Repo/$Ref/version.json"
-
 try {
-    $remote = Invoke-RestMethod -Uri $rawUrl -UseBasicParsing -TimeoutSec 8
+    $rawUrl = "https://github.com/$Repo/raw/refs/heads/$Ref/version.json"
+    $remote = Invoke-RestMethod -Uri $rawUrl -Headers @{ 'Cache-Control' = 'no-cache' } -UseBasicParsing -TimeoutSec 8
 } catch {
-    $result = [ordered]@{
-        update_available = $false
-        local_version    = $localVersion
-        latest_version   = $null
-        repository       = "https://github.com/$Repo"
-        error            = $_.Exception.Message
+    try {
+        $rawUrl = "https://raw.githubusercontent.com/$Repo/$Ref/version.json"
+        $remote = Invoke-RestMethod -Uri $rawUrl -Headers @{ 'Cache-Control' = 'no-cache' } -UseBasicParsing -TimeoutSec 8
+    } catch {
+        $result = [ordered]@{
+            update_available = $false
+            local_version    = $localVersion
+            latest_version   = $null
+            repository       = "https://github.com/$Repo"
+            error            = $_.Exception.Message
+        }
+        if ($Json) { $result | ConvertTo-Json -Depth 5 | Write-Output } else { Write-Output ("Update check unavailable: {0}" -f $_.Exception.Message) }
+        exit 2
     }
-    if ($Json) { $result | ConvertTo-Json -Depth 5 | Write-Output } else { Write-Output ("Update check unavailable: {0}" -f $_.Exception.Message) }
-    exit 2
 }
 
 $latestVersion = [string]$remote.version
