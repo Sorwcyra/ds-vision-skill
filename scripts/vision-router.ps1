@@ -38,8 +38,15 @@ function Test-PortOpen([int]$Port) {
 }
 
 function Run-Step([string]$Name, [scriptblock]$Command) {
-    $output = & $Command 2>&1
-    $code = $LASTEXITCODE
+    # A terminating error in a child script must not abort the fallback chain.
+    $output = @()
+    $code = 1
+    try {
+        $output = & $Command 2>&1
+        $code = $LASTEXITCODE
+    } catch {
+        $output = @("ERROR: $($_.Exception.Message)")
+    }
     return [pscustomobject]@{
         name = $Name
         code = $code
