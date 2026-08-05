@@ -47,52 +47,87 @@ function Run-Step([string]$Name, [scriptblock]$Command) {
     }
 }
 
+function Quote-PowerShellSingle([string]$Value) {
+    return "'" + ($Value -replace "'", "''") + "'"
+}
+
 function Run-Race([string]$ScriptPath, [array]$ChannelNames, [string]$InputPath, [string]$UserPrompt, [bool]$DisableCache) {
-    $jobs = @()
+    $workers = @()
     foreach ($name in $ChannelNames) {
-        $jobs += Start-Job -Name ("ds-vision-" + $name) -ArgumentList $ScriptPath, $name, $InputPath, $UserPrompt, $DisableCache -ScriptBlock {
-            param($VlmScript, $ChannelName, $JobImagePath, $JobPrompt, $JobNoCache)
-            if ($JobNoCache) {
-                $output = & $VlmScript -ImagePath $JobImagePath -Prompt $JobPrompt -Json -NoCache -Channel $ChannelName 2>&1
-            } else {
-                $output = & $VlmScript -ImagePath $JobImagePath -Prompt $JobPrompt -Json -Channel $ChannelName 2>&1
-            }
-            [pscustomobject]@{
-                name = $ChannelName
-                code = $LASTEXITCODE
-                text = (($output | Out-String).Trim())
-            }
+        $outFile = Join-Path $env:TEMP ("ds-vision-race-{0}-{1}.out" -f $PID, ([guid]::NewGuid().ToString('N')))
+        $errFile = Join-Path $env:TEMP ("ds-vision-race-{0}-{1}.err" -f $PID, ([guid]::NewGuid().ToString('N')))
+        $quotedScript = Quote-PowerShellSingle $ScriptPath
+        $quotedPath = Quote-PowerShellSingle $InputPath
+        $quotedPrompt = Quote-PowerShellSingle $UserPrompt
+        $quotedChannel = Quote-PowerShellSingle $name
+        $cacheSwitch = if ($DisableCache) { ' -NoCache' } else { '' }
+        $cmd = @"
+`$ErrorActionPreference = 'Continue'
+& $quotedScript -ImagePath $quotedPath -Prompt $quotedPrompt -Json$cacheSwitch -Channel $quotedChannel
+exit `$LASTEXITCODE
+"@
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
+        $proc = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand',$encoded) -WindowStyle Hidden -RedirectStandardOutput $outFile -RedirectStandardError $errFile -PassThru
+        $workers += [pscustomobject]@{
+            name = $name
+            process = $proc
+            stdout = $outFile
+            stderr = $errFile
         }
     }
 
-    $pending = @($jobs)
+    $pending = @($workers)
     $results = @()
     try {
         while ($pending.Count -gt 0) {
-            $finished = Wait-Job -Job $pending -Any -Timeout 1
-            if (-not $finished) { continue }
-            foreach ($job in @($finished)) {
-                $result = Receive-Job -Job $job
-                if ($result) {
-                    $results += $result
-                    if ($result.code -eq 0) {
-                        foreach ($other in @($pending | Where-Object { $_.Id -ne $job.Id })) {
-                            Stop-Job -Job $other -ErrorAction SilentlyContinue
-                        }
-                        return [pscustomobject]@{
-                            success = $true
-                            winner  = $result
-                            attempts = $results
+            $finished = @($pending | Where-Object { $_.process.HasExited })
+            if ($finished.Count -eq 0) {
+                Start-Sleep -Milliseconds 100
+                continue
+            }
+            foreach ($worker in @($finished)) {
+                $worker.process.WaitForExit()
+                $stdout = if (Test-Path -LiteralPath $worker.stdout) { (Get-Content -Raw -LiteralPath $worker.stdout) } else { '' }
+                $stderr = if (Test-Path -LiteralPath $worker.stderr) { (Get-Content -Raw -LiteralPath $worker.stderr) } else { '' }
+                $code = $worker.process.ExitCode
+                $stdoutText = $stdout.Trim()
+                $jsonSuccess = $false
+                if ($stdoutText) {
+                    try {
+                        $parsed = $stdoutText | ConvertFrom-Json
+                        $jsonSuccess = [bool]$parsed.result
+                    } catch { }
+                }
+                if ($jsonSuccess -and $null -eq $code) { $code = 0 }
+                $text = if ($jsonSuccess -or $code -eq 0) { $stdoutText } else { (($stdout + "`n" + $stderr).Trim()) }
+                $result = [pscustomobject]@{
+                    name = $worker.name
+                    code = $code
+                    text = $text
+                }
+                $results += $result
+                if ($jsonSuccess -or $result.code -eq 0) {
+                    foreach ($other in @($pending | Where-Object { $_.process.Id -ne $worker.process.Id })) {
+                        if (-not $other.process.HasExited) {
+                            Stop-Process -Id $other.process.Id -Force -ErrorAction SilentlyContinue
                         }
                     }
+                    return [pscustomobject]@{
+                        success = $true
+                        winner  = $result
+                        attempts = $results
+                    }
                 }
-                $pending = @($pending | Where-Object { $_.Id -ne $job.Id })
+                $pending = @($pending | Where-Object { $_.process.Id -ne $worker.process.Id })
             }
         }
     } finally {
-        foreach ($job in $jobs) {
-            Stop-Job -Job $job -ErrorAction SilentlyContinue
-            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        foreach ($worker in $workers) {
+            if ($worker.process -and -not $worker.process.HasExited) {
+                Stop-Process -Id $worker.process.Id -Force -ErrorAction SilentlyContinue
+            }
+            Remove-Item -LiteralPath $worker.stdout -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $worker.stderr -ErrorAction SilentlyContinue
         }
     }
 
@@ -100,6 +135,30 @@ function Run-Race([string]$ScriptPath, [array]$ChannelNames, [string]$InputPath,
         success = $false
         winner  = $null
         attempts = $results
+    }
+}
+
+function Emit-RaceWinner([object]$Race, [array]$StartedChannels) {
+    if (-not $Json) {
+        Write-Output $Race.winner.text
+        return
+    }
+
+    try {
+        $payload = $Race.winner.text | ConvertFrom-Json
+        if (-not $payload.metadata) {
+            $payload | Add-Member -NotePropertyName metadata -NotePropertyValue ([pscustomobject]@{}) -Force
+        }
+        $raceMeta = [ordered]@{
+            mode               = 'first-success'
+            winner             = $Race.winner.name
+            started_channels   = @($StartedChannels)
+            completed_attempts = @($Race.attempts | ForEach-Object { [ordered]@{ name = $_.name; code = $_.code } })
+        }
+        $payload.metadata | Add-Member -NotePropertyName race -NotePropertyValue $raceMeta -Force
+        Write-Output ($payload | ConvertTo-Json -Depth 10)
+    } catch {
+        Write-Output $Race.winner.text
     }
 }
 
@@ -192,19 +251,19 @@ if ($Intent -eq 'reason') {
     if ($NoCache) { $baseArgs += '-NoCache' }
 
     $raceChannels = @()
-    if (Get-EnvValue 'GLM_API_KEY') {
-        $raceChannels += 'glm'
-        $raceChannels += 'glm-thinking'
-    }
     if (Get-EnvValue 'AGNES_API_KEY') {
-        $raceChannels += 'agnes-2.5-flash'
         $raceChannels += 'agnes-2.0-flash'
+        $raceChannels += 'agnes-2.5-flash'
+    }
+    if (Get-EnvValue 'GLM_API_KEY') {
+        $raceChannels += 'glm-thinking'
+        $raceChannels += 'glm'
     }
 
     if ($raceChannels.Count -gt 0) {
         $race = Run-Race $vlm $raceChannels $Path $Prompt ([bool]$NoCache)
         $attempts += @($race.attempts)
-        if ($race.success) { Write-Output $race.winner.text; exit 0 }
+        if ($race.success) { Emit-RaceWinner $race $raceChannels; exit 0 }
     }
 
     $channels = @()
@@ -217,7 +276,11 @@ if ($Intent -eq 'reason') {
     if ((Test-PortOpen 11434) -or (Test-PortOpen 1234) -or (Test-PortOpen 8080)) { $channels += 'local' }
 
     foreach ($ch in $channels) {
-        $attempts += Run-Step $ch { & $vlm @baseArgs -Channel $ch }
+        if ($NoCache) {
+            $attempts += Run-Step $ch { & $vlm -ImagePath $Path -Prompt $Prompt -Json -NoCache -Channel $ch }
+        } else {
+            $attempts += Run-Step $ch { & $vlm -ImagePath $Path -Prompt $Prompt -Json -Channel $ch }
+        }
         if ($attempts[-1].code -eq 0) { Write-Output $attempts[-1].text; exit 0 }
     }
 }
