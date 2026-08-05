@@ -77,7 +77,8 @@ scripts\vlm-vision.ps1 -ImagePath <test.png> -Prompt "describe this image in one
 
 ## 路由优先级
 
-- 图片理解：`race(glm, glm-thinking, agnes-2.5-flash, agnes-2.0-flash) -> custom-1 -> custom-2 -> custom-3 -> local`
-- 复杂视觉推理：`race(glm, glm-thinking, agnes-2.5-flash, agnes-2.0-flash) -> custom-1 -> custom-2 -> custom-3 -> local`
+- `auto` 模式下，图片默认进入视觉理解免费竞速池；需要纯 OCR 时显式使用 `-Intent ocr`，或使用 `-AccurateOcr`。
+- 图片理解：`race(agnes-2.5-flash, agnes-2.0-flash, glm, glm-thinking) -> custom-1 -> custom-2 -> custom-3 -> local`
+- 复杂视觉推理：`race(agnes-2.5-flash, agnes-2.0-flash, glm, glm-thinking) -> custom-1 -> custom-2 -> custom-3 -> local`
 - 文档解析：`mineru flash -> mineru extract`
 - OCR：`baidu-ocr -> windows-ocr -> vision reasoning`

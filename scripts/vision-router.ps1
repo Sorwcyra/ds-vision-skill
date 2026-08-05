@@ -205,7 +205,7 @@ $imageExts = @('.png','.jpg','.jpeg','.webp','.gif','.bmp','.tif','.tiff')
 if ($Intent -eq 'auto') {
     if ($ext -in $documentExts) { $Intent = 'document' }
     elseif ($ext -in $imageExts) {
-        if ($Prompt -match '(?i)\bocr\b|\u6587\u5b57|\u8bc6\u522b|\u63d0\u53d6|\u7968\u636e|\u53d1\u7968|\u626b\u63cf') { $Intent = 'ocr' }
+        if ($AccurateOcr -or $Prompt -match '(?i)\bocr\b') { $Intent = 'ocr' }
         else { $Intent = 'reason' }
     } else {
         $Intent = 'document'
@@ -267,12 +267,12 @@ if ($Intent -eq 'reason') {
 
     $raceChannels = @()
     if (Get-EnvValue 'AGNES_API_KEY') {
-        $raceChannels += 'agnes-2.0-flash'
         $raceChannels += 'agnes-2.5-flash'
+        $raceChannels += 'agnes-2.0-flash'
     }
     if (Get-EnvValue 'GLM_API_KEY') {
-        $raceChannels += 'glm-thinking'
         $raceChannels += 'glm'
+        $raceChannels += 'glm-thinking'
     }
 
     if ($raceChannels.Count -gt 0) {

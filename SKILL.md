@@ -24,7 +24,7 @@ scripts/vision-router.ps1 -Path <file> -Prompt "<user request>" -Intent auto -Js
 
 常用参数：
 
-- `-Intent auto|reason|ocr|document`：默认 `auto`，按文件类型和 prompt 自动判断。
+- `-Intent auto|reason|ocr|document`：默认 `auto`。图片默认走视觉理解免费竞速池；纯 OCR 请显式使用 `-Intent ocr`。
 - `-Complex`：图表、数学、复杂 UI、代码截图、多步骤视觉推理时启用。
 - `-AccurateOcr`：票据、扫描件、低清晰度文字识别时启用百度高精度 OCR。
 - `-NoCache`：强制重新调用视觉模型。
@@ -34,13 +34,13 @@ scripts/vision-router.ps1 -Path <file> -Prompt "<user request>" -Intent auto -Js
 ## 路由规则
 
 1. PDF、论文、报告、长文档、多页扫描件：使用 `scripts/mineru-extract.ps1 -FilePath <file> -Mode flash -Json`。如果配置了 `MINERU_TOKEN` 且 flash 失败，再尝试 `-Mode extract`。
-2. 图片且需要理解/推理：使用 `scripts/vision-router.ps1` 并发调用已配置的免费云视觉通道：`glm`、`glm-thinking`、`agnes-2.5-flash`、`agnes-2.0-flash`；谁先成功返回就采用谁的结果。如果全部失败，再降级到 `custom-1`、`custom-2`、`custom-3` 和 `local`。
-3. 图片且只要文字：优先 `scripts/baidu-ocr.ps1 -ImagePath <file> -Json`；未配置或失败时用 `scripts/windows-ocr.ps1 -ImagePath <file> -Json`。
+2. 图片且需要理解/推理：使用 `scripts/vision-router.ps1` 并发调用已配置的免费云视觉通道：`agnes-2.5-flash`、`agnes-2.0-flash`、`glm`、`glm-thinking`；谁先成功返回就采用谁的结果。如果全部失败，再降级到 `custom-1`、`custom-2`、`custom-3` 和 `local`。
+3. 图片默认进入视觉理解免费竞速池；需要纯文字识别时显式使用 `-Intent ocr`，优先 `scripts/baidu-ocr.ps1 -ImagePath <file> -Json`；未配置或失败时用 `scripts/windows-ocr.ps1 -ImagePath <file> -Json`。
 4. 无法判断时：使用 `vision-router.ps1 -Intent auto -Complex -Json`。
 
 ## 降级链
 
-- 视觉理解：`race(glm, glm-thinking, agnes-2.5-flash, agnes-2.0-flash) -> custom-1 -> custom-2 -> custom-3 -> local`。
+- 视觉理解：`race(agnes-2.5-flash, agnes-2.0-flash, glm, glm-thinking) -> custom-1 -> custom-2 -> custom-3 -> local`。
 - 文档解析：`mineru flash -> mineru extract`。
 - OCR：`baidu-ocr -> windows-ocr -> vision reasoning`。
 - 同一通道遇到 401、403、429、网络错误或空结果时，不要反复重试；直接切换下一通道。

@@ -216,13 +216,18 @@ scripts\setup.ps1 -SetKey -Channel agnes-2.5-flash -Key <AGNES_API_KEY> -Verify
 For image reasoning, these channels run concurrently:
 
 ```text
-glm
-glm-thinking
 agnes-2.5-flash
 agnes-2.0-flash
+glm
+glm-thinking
 ```
 
 The first successful response wins.
+
+In `auto` mode, image files route to image reasoning by default, so the free
+race pool is tried first. Use `-Intent ocr` for OCR-only extraction, or
+`-AccurateOcr` when a scanned or low-quality text image should go straight to
+the OCR route.
 
 ### Optional: Three Third-Party Slots
 
@@ -274,13 +279,13 @@ flowchart TD
     A["File + user request"] --> B{"Task type"}
 
     B -->|PDF / document| C["MinerU<br/>flash -> extract"]
-    B -->|text-only OCR| D["OCR<br/>Baidu -> Windows"]
-    B -->|image understanding| E["start free race pool"]
+    B -->|explicit OCR / AccurateOcr| D["OCR<br/>Baidu -> Windows"]
+    B -->|image default| E["start free race pool"]
 
-    E --> E1["glm"]
-    E --> E2["glm-thinking"]
-    E --> E3["agnes-2.5-flash"]
-    E --> E4["agnes-2.0-flash"]
+    E --> E1["agnes-2.5-flash"]
+    E --> E2["agnes-2.0-flash"]
+    E --> E3["glm"]
+    E --> E4["glm-thinking"]
 
     E1 --> F{"first success"}
     E2 --> F
@@ -312,8 +317,9 @@ scripts\vision-router.ps1 -Path <file> -Prompt "Analyze this file" -Json
 ### Routing
 
 ```text
-image reasoning: race(glm, glm-thinking, agnes-2.5-flash, agnes-2.0-flash) -> custom-1 -> custom-2 -> custom-3 -> local
+image reasoning: race(agnes-2.5-flash, agnes-2.0-flash, glm, glm-thinking) -> custom-1 -> custom-2 -> custom-3 -> local
 ocr: baidu-ocr -> windows-ocr -> vision reasoning
+auto image default: image reasoning / free race pool first
 document: mineru flash -> mineru extract
 ```
 
