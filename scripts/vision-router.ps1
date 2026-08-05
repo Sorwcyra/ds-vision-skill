@@ -38,8 +38,15 @@ function Test-PortOpen([int]$Port) {
 }
 
 function Run-Step([string]$Name, [scriptblock]$Command) {
-    $output = & $Command 2>&1
-    $code = $LASTEXITCODE
+    # A terminating error in a child script must not abort the fallback chain.
+    $output = @()
+    $code = 1
+    try {
+        $output = & $Command 2>&1
+        $code = $LASTEXITCODE
+    } catch {
+        $output = @("ERROR: $($_.Exception.Message)")
+    }
     return [pscustomobject]@{
         name = $Name
         code = $code
@@ -188,7 +195,7 @@ $imageExts = @('.png','.jpg','.jpeg','.webp','.gif','.bmp','.tif','.tiff')
 if ($Intent -eq 'auto') {
     if ($ext -in $documentExts) { $Intent = 'document' }
     elseif ($ext -in $imageExts) {
-        if ($Prompt -match '(?i)\bocr\b|文字|识别|提取|票据|发票|扫描') { $Intent = 'ocr' }
+        if ($Prompt -match '(?i)\bocr\b|\u6587\u5b57|\u8bc6\u522b|\u63d0\u53d6|\u7968\u636e|\u53d1\u7968|\u626b\u63cf') { $Intent = 'ocr' }
         else { $Intent = 'reason' }
     } else {
         $Intent = 'document'
@@ -247,8 +254,6 @@ if ($Intent -eq 'ocr') {
 
 if ($Intent -eq 'reason') {
     $vlm = Join-Path $scriptDir 'vlm-vision.ps1'
-    $baseArgs = @('-ImagePath', $Path, '-Prompt', $Prompt, '-Json')
-    if ($NoCache) { $baseArgs += '-NoCache' }
 
     $raceChannels = @()
     if (Get-EnvValue 'AGNES_API_KEY') {
