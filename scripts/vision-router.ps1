@@ -14,6 +14,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$ProgressPreference = 'SilentlyContinue'
 
 function Fail([int]$Code, [string]$Message) {
     [Console]::Error.WriteLine("ERROR: $Message")
@@ -61,8 +62,6 @@ function Quote-PowerShellSingle([string]$Value) {
 function Run-Race([string]$ScriptPath, [array]$ChannelNames, [string]$InputPath, [string]$UserPrompt, [bool]$DisableCache) {
     $workers = @()
     foreach ($name in $ChannelNames) {
-        $outFile = Join-Path $env:TEMP ("ds-vision-race-{0}-{1}.out" -f $PID, ([guid]::NewGuid().ToString('N')))
-        $errFile = Join-Path $env:TEMP ("ds-vision-race-{0}-{1}.err" -f $PID, ([guid]::NewGuid().ToString('N')))
         $quotedScript = Quote-PowerShellSingle $ScriptPath
         $quotedPath = Quote-PowerShellSingle $InputPath
         $quotedPrompt = Quote-PowerShellSingle $UserPrompt
@@ -70,16 +69,28 @@ function Run-Race([string]$ScriptPath, [array]$ChannelNames, [string]$InputPath,
         $cacheSwitch = if ($DisableCache) { ' -NoCache' } else { '' }
         $cmd = @"
 `$ErrorActionPreference = 'Continue'
+`$ProgressPreference = 'SilentlyContinue'
 & $quotedScript -ImagePath $quotedPath -Prompt $quotedPrompt -Json$cacheSwitch -Channel $quotedChannel
 exit `$LASTEXITCODE
 "@
         $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
-        $proc = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand',$encoded) -WindowStyle Hidden -RedirectStandardOutput $outFile -RedirectStandardError $errFile -PassThru
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = 'powershell.exe'
+        $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded"
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+        $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+        $proc = New-Object System.Diagnostics.Process
+        $proc.StartInfo = $psi
+        if (-not $proc.Start()) {
+            throw "Failed to start channel worker: $name"
+        }
         $workers += [pscustomobject]@{
             name = $name
             process = $proc
-            stdout = $outFile
-            stderr = $errFile
         }
     }
 
@@ -94,8 +105,8 @@ exit `$LASTEXITCODE
             }
             foreach ($worker in @($finished)) {
                 $worker.process.WaitForExit()
-                $stdout = if (Test-Path -LiteralPath $worker.stdout) { (Get-Content -Raw -LiteralPath $worker.stdout) } else { '' }
-                $stderr = if (Test-Path -LiteralPath $worker.stderr) { (Get-Content -Raw -LiteralPath $worker.stderr) } else { '' }
+                $stdout = $worker.process.StandardOutput.ReadToEnd()
+                $stderr = $worker.process.StandardError.ReadToEnd()
                 $code = $worker.process.ExitCode
                 $stdoutText = $stdout.Trim()
                 $jsonSuccess = $false
@@ -133,8 +144,7 @@ exit `$LASTEXITCODE
             if ($worker.process -and -not $worker.process.HasExited) {
                 Stop-Process -Id $worker.process.Id -Force -ErrorAction SilentlyContinue
             }
-            Remove-Item -LiteralPath $worker.stdout -ErrorAction SilentlyContinue
-            Remove-Item -LiteralPath $worker.stderr -ErrorAction SilentlyContinue
+            if ($worker.process) { $worker.process.Dispose() }
         }
     }
 
