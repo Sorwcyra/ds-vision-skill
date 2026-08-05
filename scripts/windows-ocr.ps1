@@ -13,6 +13,9 @@ if (-not (Test-Path -LiteralPath $ImagePath)) {
     Write-Error "Image not found: $ImagePath"
     exit 1
 }
+# WinRT GetFileFromPathAsync requires an absolute backslash path;
+# forward-slash input (common from shells/agents) throws otherwise.
+$ImagePath = [IO.Path]::GetFullPath($ImagePath)
 
 $ext = [IO.Path]::GetExtension($ImagePath).ToLower()
 if ($ext -notin @('.png','.jpg','.jpeg','.bmp','.tif','.tiff','.gif','.webp')) {
@@ -37,20 +40,25 @@ function Await([object]$WinRtTask, [Type]$ResultType) {
     return $netTask.Result
 }
 
-$file = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($ImagePath)) ([Windows.Storage.StorageFile])
-$stream = Await ($file.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
-$decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
-$bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
+try {
+    $file = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($ImagePath)) ([Windows.Storage.StorageFile])
+    $stream = Await ($file.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
+    $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
+    $bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
 
-$engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage((New-Object Windows.Globalization.Language('zh-Hans')))
-if (-not $engine) { $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages() }
-if (-not $engine) { $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage((New-Object Windows.Globalization.Language('en-US'))) }
-if (-not $engine) {
-    Write-Error 'No OCR language engine available on this system.'
+    $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage((New-Object Windows.Globalization.Language('zh-Hans')))
+    if (-not $engine) { $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages() }
+    if (-not $engine) { $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage((New-Object Windows.Globalization.Language('en-US'))) }
+    if (-not $engine) {
+        Write-Error 'No OCR language engine available on this system.'
+        exit 1
+    }
+
+    $result = Await ($engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
+} catch {
+    Write-Error "windows-ocr failed: $($_.Exception.Message)"
     exit 1
 }
-
-$result = Await ($engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
 if (-not $result) { exit 0 }
 $lines = @()
 foreach ($line in $result.Lines) {
@@ -73,3 +81,6 @@ if ($Json) {
 } else {
     foreach ($l in $lines) { Write-Output $l }
 }
+# Explicit exit 0: vision-router.ps1 reads $LASTEXITCODE to detect success;
+# without it a stale value makes the router skip this channel.
+exit 0
