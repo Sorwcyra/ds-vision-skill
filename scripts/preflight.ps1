@@ -48,7 +48,10 @@ $channels = [ordered]@{
     'agnes-2.5-flash'                        = 'AGNES_API_KEY'
     'agnes-2.0-flash'                        = 'AGNES_API_KEY'
     'baidu-ocr (general/accurate)'           = 'BAIDU_API_KEY'
-    'custom relay'                           = 'VISION_CUSTOM_API_KEY'
+    'custom-1 relay'                         = 'VISION_CUSTOM_1_API_KEY'
+    'custom-2 relay'                         = 'VISION_CUSTOM_2_API_KEY'
+    'custom-3 relay'                         = 'VISION_CUSTOM_3_API_KEY'
+    'legacy custom relay'                    = 'VISION_CUSTOM_API_KEY'
 }
 
 $cloud = [ordered]@{}
@@ -70,10 +73,13 @@ $data = [ordered]@{
     notes = [ordered]@{
         baidu_secret_missing = [bool]((Get-EnvValue 'BAIDU_API_KEY') -and -not (Get-EnvValue 'BAIDU_SECRET_KEY'))
         agnes_base_override   = [bool](Get-EnvValue 'AGNES_BASE_URL')
-        custom_configured    = [bool]((Get-EnvValue 'VISION_CUSTOM_API_KEY') -and (Get-EnvValue 'VISION_CUSTOM_BASE_URL') -and (Get-EnvValue 'VISION_CUSTOM_MODEL'))
+        custom_1_configured   = [bool]((Get-EnvValue 'VISION_CUSTOM_1_API_KEY') -and (Get-EnvValue 'VISION_CUSTOM_1_BASE_URL') -and (Get-EnvValue 'VISION_CUSTOM_1_MODEL'))
+        custom_2_configured   = [bool]((Get-EnvValue 'VISION_CUSTOM_2_API_KEY') -and (Get-EnvValue 'VISION_CUSTOM_2_BASE_URL') -and (Get-EnvValue 'VISION_CUSTOM_2_MODEL'))
+        custom_3_configured   = [bool]((Get-EnvValue 'VISION_CUSTOM_3_API_KEY') -and (Get-EnvValue 'VISION_CUSTOM_3_BASE_URL') -and (Get-EnvValue 'VISION_CUSTOM_3_MODEL'))
+        legacy_custom_configured = [bool]((Get-EnvValue 'VISION_CUSTOM_API_KEY') -and (Get-EnvValue 'VISION_CUSTOM_BASE_URL') -and (Get-EnvValue 'VISION_CUSTOM_MODEL'))
     }
     routing = [ordered]@{
-        image_reasoning  = @('glm','glm-thinking','agnes-2.5-flash','agnes-2.0-flash','custom','local')
+        image_reasoning  = @('race: glm/glm-thinking/agnes-2.5-flash/agnes-2.0-flash','custom-1','custom-2','custom-3','local')
         document_parsing = @('mineru flash','mineru extract')
         ocr              = @('baidu-ocr','windows-ocr','mineru')
     }
@@ -106,9 +112,14 @@ foreach ($name in $channels.Keys) {
 }
 if ($data.notes.baidu_secret_missing) { Write-Output '- baidu-ocr note: BAIDU_API_KEY set but BAIDU_SECRET_KEY missing.' }
 if ($data.notes.agnes_base_override) { Write-Output ("- agnes endpoint override: {0}" -f (Get-EnvValue 'AGNES_BASE_URL')) }
-if ($data.notes.custom_configured) { Write-Output ("- custom endpoint: {0} model={1}" -f (Get-EnvValue 'VISION_CUSTOM_BASE_URL'), (Get-EnvValue 'VISION_CUSTOM_MODEL')) }
+foreach ($slot in 1..3) {
+    if ($data.notes["custom_${slot}_configured"]) {
+        Write-Output ("- custom-{0} endpoint: {1} model={2}" -f $slot, (Get-EnvValue "VISION_CUSTOM_${slot}_BASE_URL"), (Get-EnvValue "VISION_CUSTOM_${slot}_MODEL"))
+    }
+}
+if ($data.notes.legacy_custom_configured) { Write-Output ("- legacy custom endpoint: {0} model={1}" -f (Get-EnvValue 'VISION_CUSTOM_BASE_URL'), (Get-EnvValue 'VISION_CUSTOM_MODEL')) }
 Write-Output ''
 Write-Output '### Category routing (first available)'
-Write-Output '- image_reasoning: race(glm, glm-thinking, agnes-2.5-flash, agnes-2.0-flash) -> custom -> local'
+Write-Output '- image_reasoning: race(glm, glm-thinking, agnes-2.5-flash, agnes-2.0-flash) -> custom-1 -> custom-2 -> custom-3 -> local'
 Write-Output '- document_parsing: mineru flash -> mineru extract'
 Write-Output '- ocr: baidu-ocr -> windows-ocr (local) -> mineru'

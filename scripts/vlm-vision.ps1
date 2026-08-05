@@ -5,7 +5,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$ImagePath,
     [string]$Prompt = 'Describe this image in detail.',
-    [ValidateSet('glm','glm-thinking','agnes-2.5-flash','agnes-2.0-flash','custom','local')]
+    [ValidateSet('glm','glm-thinking','agnes-2.5-flash','agnes-2.0-flash','custom','custom-1','custom-2','custom-3','local')]
     [string]$Channel = 'glm',
     [string]$Model = '',
     [string]$BaseUrl = '',
@@ -40,6 +40,9 @@ $channelKeys = @{
     'agnes-2.5-flash' = Get-EnvValue 'AGNES_API_KEY'
     'agnes-2.0-flash' = Get-EnvValue 'AGNES_API_KEY'
     custom        = Get-EnvValue 'VISION_CUSTOM_API_KEY'
+    'custom-1'    = Get-EnvValue 'VISION_CUSTOM_1_API_KEY'
+    'custom-2'    = Get-EnvValue 'VISION_CUSTOM_2_API_KEY'
+    'custom-3'    = Get-EnvValue 'VISION_CUSTOM_3_API_KEY'
 }
 
 $channelDefaults = @{
@@ -48,6 +51,9 @@ $channelDefaults = @{
     'agnes-2.5-flash' = @{ url = if (Get-EnvValue 'AGNES_BASE_URL') { Get-EnvValue 'AGNES_BASE_URL' } else { 'https://api.agnes-ai.cn/v1/chat/completions' }; model = 'agnes-2.5-flash' }
     'agnes-2.0-flash' = @{ url = if (Get-EnvValue 'AGNES_BASE_URL') { Get-EnvValue 'AGNES_BASE_URL' } else { 'https://api.agnes-ai.cn/v1/chat/completions' }; model = 'agnes-2.0-flash' }
     custom        = @{ url = Get-EnvValue 'VISION_CUSTOM_BASE_URL'; model = Get-EnvValue 'VISION_CUSTOM_MODEL' }
+    'custom-1'    = @{ url = Get-EnvValue 'VISION_CUSTOM_1_BASE_URL'; model = Get-EnvValue 'VISION_CUSTOM_1_MODEL' }
+    'custom-2'    = @{ url = Get-EnvValue 'VISION_CUSTOM_2_BASE_URL'; model = Get-EnvValue 'VISION_CUSTOM_2_MODEL' }
+    'custom-3'    = @{ url = Get-EnvValue 'VISION_CUSTOM_3_BASE_URL'; model = Get-EnvValue 'VISION_CUSTOM_3_MODEL' }
 }
 
 function Get-ChatUrl([string]$Url) {

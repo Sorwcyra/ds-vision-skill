@@ -208,6 +208,11 @@ if ($Intent -eq 'reason') {
     }
 
     $channels = @()
+    foreach ($slot in 1..3) {
+        if ((Get-EnvValue "VISION_CUSTOM_${slot}_API_KEY") -and (Get-EnvValue "VISION_CUSTOM_${slot}_BASE_URL") -and (Get-EnvValue "VISION_CUSTOM_${slot}_MODEL")) {
+            $channels += "custom-$slot"
+        }
+    }
     if ((Get-EnvValue 'VISION_CUSTOM_API_KEY') -and (Get-EnvValue 'VISION_CUSTOM_BASE_URL') -and (Get-EnvValue 'VISION_CUSTOM_MODEL')) { $channels += 'custom' }
     if ((Test-PortOpen 11434) -or (Test-PortOpen 1234) -or (Test-PortOpen 8080)) { $channels += 'local' }
 

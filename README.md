@@ -2,70 +2,35 @@
 
 Language: [中文](#中文) | [English](#english)
 
-`ds-vision-skill` gives text-first coding agents a practical vision layer. It turns images, screenshots, scanned files, PDFs, charts, UI screenshots, code screenshots, and math-problem images into readable text or a standard JSON envelope, then hands the result back to the main model for reasoning.
+`ds-vision-skill` is a vision layer for text-first agents. It routes images, screenshots, PDFs, scans, charts, UI captures, code screenshots, and math images into OCR, document parsing, or visual reasoning, then returns a clean JSON envelope for the main model to reason over.
 
-The core idea is simple: keep the main model focused on thinking, and let this skill choose the fastest useful visual tool.
+The recommended setup is:
+
+```text
+first configure the free race pool -> optionally fill custom-1/custom-2/custom-3 -> use vision-router.ps1
+```
 
 ---
 
 ## 中文
 
-### 它解决什么
+### 一句话
 
-很多纯文本模型本身不直接“看图”，但工作里经常会遇到截图、票据、PDF、图表、网页 UI、代码报错截图、数学题图片。这个 skill 就是一个视觉前置层：
+这是给 Codex / DeepSeek / 纯文本推理模型用的“视觉前置层”。用户给一张图或一个 PDF，它负责识别任务、选择通道、并发竞速、失败降级，最后把可读结果交给主模型。
 
-- 图片理解：描述图片、读 UI、分析截图、理解代码截图
-- OCR：提取票据、扫描件、表单、截图里的文字
-- 图表推理：分析趋势图、架构图、流程图、数学题图片
-- 文档解析：处理 PDF、论文、报告、长文档和扫描件
+### 下载后第一步：配置免费竞速池
 
-### 核心特点
+免费竞速池是默认主路径。建议用户安装 skill 后优先配置这两组 key：
 
-- 统一入口：优先调用 `scripts/vision-router.ps1`
-- 自动路由：根据文件类型和意图选择图片理解、OCR 或文档解析
-- 免费通道竞速：GLM 两个模型 + Agnes 两个模型并发调用，谁先成功就用谁
-- 明确降级：免费云通道失败后再走 custom / local
-- 结构化输出：所有工具在 `-Json` 模式下输出统一 envelope
-- 隐私优先：敏感内容可优先走 Windows OCR 或本地模型
-- 可更新：内置版本检查和显式更新脚本
+```powershell
+# GLM: 同一个 key 同时启用 glm + glm-thinking
+scripts\setup.ps1 -SetKey -Channel glm -Key <GLM_API_KEY> -Verify
 
-### 架构图
-
-```mermaid
-flowchart TD
-    A["用户输入<br/>图片 / 截图 / PDF / 扫描件"] --> B["vision-router.ps1<br/>统一入口"]
-    B --> C{"自动判断任务"}
-
-    C -->|PDF / 文档| D["mineru-extract.ps1<br/>MinerU flash -> extract"]
-    C -->|只要文字| E["OCR 通道<br/>Baidu OCR -> Windows OCR"]
-    C -->|理解 / 推理| F["VLM 竞速池<br/>GLM + Agnes 并发"]
-
-    F --> F1["glm"]
-    F --> F2["glm-thinking"]
-    F --> F3["agnes-2.5-flash"]
-    F --> F4["agnes-2.0-flash"]
-
-    F1 --> G{"第一个成功返回"}
-    F2 --> G
-    F3 --> G
-    F4 --> G
-
-    G -->|成功| J["标准 JSON Envelope"]
-    G -->|全部失败| H["降级<br/>custom -> local"]
-    H --> J
-    D --> J
-    E --> J
-
-    J --> K["主模型读取 result"]
-    K --> L["面向用户的解释、推理和结论"]
+# Agnes: 同一个 key 同时启用 agnes-2.5-flash + agnes-2.0-flash
+scripts\setup.ps1 -SetKey -Channel agnes-2.5-flash -Key <AGNES_API_KEY> -Verify
 ```
 
-### 运行流程
-
-1. 用户给出一个文件和需求。
-2. `vision-router.ps1` 判断任务是 `document`、`ocr` 还是 `reason`。
-3. 文档走 MinerU，纯文字走 OCR。
-4. 图片理解会同时启动已配置的免费云视觉通道：
+配置完成后，图片理解会并发调用：
 
 ```text
 glm
@@ -74,20 +39,95 @@ agnes-2.5-flash
 agnes-2.0-flash
 ```
 
-5. 第一个成功返回的通道成为 winner，其余请求会被停止清理。
-6. 如果免费通道全部失败，再尝试 `custom` 和 `local`。
-7. 最终输出统一 JSON，主模型只需要读取 `result` 继续推理。
+谁先成功返回，就采用谁的结果。这个设计的目标是快：免费通道一起跑，不等最慢的那个。
 
-### 快速开始
+### 可选：3 个第三方模型空槽
 
-检查可用通道：
+如果用户有自己的 OpenAI-compatible 视觉模型、中转服务或私有模型，可以填入这 3 个空闲通道：
+
+```powershell
+scripts\setup.ps1 -SetCustom -Slot 1 -BaseUrl <url> -Key <key> -Model <model> -Verify
+scripts\setup.ps1 -SetCustom -Slot 2 -BaseUrl <url> -Key <key> -Model <model> -Verify
+scripts\setup.ps1 -SetCustom -Slot 3 -BaseUrl <url> -Key <key> -Model <model> -Verify
+```
+
+它们对应：
+
+```text
+custom-1
+custom-2
+custom-3
+```
+
+免费竞速池全部失败后，才会按顺序尝试这 3 个第三方槽位。
+
+### 系统架构
+
+```mermaid
+flowchart LR
+    U["用户输入<br/>图片 / 截图 / PDF / 扫描件"] --> R["vision-router.ps1<br/>统一入口"]
+
+    R --> D["文档解析层<br/>MinerU"]
+    R --> O["OCR 层<br/>Baidu OCR / Windows OCR"]
+    R --> V["视觉推理层"]
+
+    V --> F["免费竞速池<br/>GLM + Agnes"]
+    V --> C["第三方扩展槽<br/>custom-1 / custom-2 / custom-3"]
+    V --> L["本地兜底<br/>Ollama / LM Studio / llama.cpp"]
+
+    D --> J["JSON Envelope"]
+    O --> J
+    F --> J
+    C --> J
+    L --> J
+
+    J --> M["主模型<br/>读取 result 并继续推理"]
+```
+
+### 请求流程
+
+```mermaid
+flowchart TD
+    A["输入文件 + 用户需求"] --> B{"任务类型"}
+
+    B -->|PDF / 文档| C["MinerU<br/>flash -> extract"]
+    B -->|纯文字识别| D["OCR<br/>Baidu -> Windows"]
+    B -->|图片理解 / 推理| E["启动免费竞速池"]
+
+    E --> E1["glm"]
+    E --> E2["glm-thinking"]
+    E --> E3["agnes-2.5-flash"]
+    E --> E4["agnes-2.0-flash"]
+
+    E1 --> F{"第一个成功返回"}
+    E2 --> F
+    E3 --> F
+    E4 --> F
+
+    F -->|成功| Z["输出 JSON"]
+    F -->|全部失败| G["custom-1"]
+    G -->|失败| H["custom-2"]
+    H -->|失败| I["custom-3"]
+    I -->|失败| K["local"]
+
+    C --> Z
+    D --> Z
+    G -->|成功| Z
+    H -->|成功| Z
+    I -->|成功| Z
+    K --> Z
+```
+
+### 快速使用
+
+检查状态：
 
 ```powershell
 scripts\setup.ps1 -Status
 scripts\preflight.ps1
 ```
 
-推荐统一入口：
+统一入口：
 
 ```powershell
 scripts\vision-router.ps1 -Path <文件路径> -Prompt "请分析这个文件" -Json
@@ -99,68 +139,29 @@ scripts\vision-router.ps1 -Path <文件路径> -Prompt "请分析这个文件" -
 scripts\vision-router.ps1 -Path <图片路径> -Intent ocr -Json
 ```
 
-指定复杂视觉推理：
-
-```powershell
-scripts\vision-router.ps1 -Path <图片路径> -Intent reason -Complex -Prompt "分析这张图表的趋势" -Json
-```
-
 指定文档解析：
 
 ```powershell
 scripts\vision-router.ps1 -Path <PDF路径> -Intent document -Json
 ```
 
-### 配置云通道
+### 通道表
 
-GLM：
-
-```powershell
-scripts\setup.ps1 -SetKey -Channel glm -Key <GLM_API_KEY> -Verify
-```
-
-Agnes：
-
-```powershell
-scripts\setup.ps1 -SetKey -Channel agnes-2.5-flash -Key <AGNES_API_KEY> -Verify
-scripts\setup.ps1 -SetKey -Channel agnes-2.0-flash -Key <AGNES_API_KEY> -Verify
-```
-
-Baidu OCR：
-
-```powershell
-scripts\setup.ps1 -SetKey -Channel baidu-ocr -Key <BAIDU_API_KEY> -Secret <BAIDU_SECRET_KEY> -Verify
-```
-
-OpenAI-compatible custom relay：
-
-```powershell
-scripts\setup.ps1 -SetCustom -BaseUrl <url> -Key <key> -Model <model> -Verify
-```
-
-移除配置：
-
-```powershell
-scripts\setup.ps1 -RemoveKey -Channel <glm|glm-thinking|agnes-2.5-flash|agnes-2.0-flash|baidu-ocr|custom>
-```
-
-### 通道说明
-
-| 通道 | 用途 | 环境变量 | 备注 |
+| 分组 | 通道 | 环境变量 | 说明 |
 |---|---|---|---|
-| `glm` | 快速图片理解 | `GLM_API_KEY` | 免费竞速池 |
-| `glm-thinking` | 复杂视觉推理 | `GLM_API_KEY` | 免费竞速池 |
-| `agnes-2.5-flash` | Agnes 快速视觉理解 | `AGNES_API_KEY` | 默认 endpoint: `https://api.agnes-ai.cn/v1/chat/completions` |
-| `agnes-2.0-flash` | Agnes 备用快速视觉理解 | `AGNES_API_KEY` | 默认 endpoint: `https://api.agnes-ai.cn/v1/chat/completions` |
-| `custom` | OpenAI 兼容中转 | `VISION_CUSTOM_*` | 私有或第三方服务 |
-| `baidu-ocr` | 云端 OCR | `BAIDU_API_KEY` + `BAIDU_SECRET_KEY` | token 自动缓存 |
-| `windows-ocr` | Windows 本地 OCR | 无 | 隐私优先、离线可用 |
-| `mineru` | PDF / 文档解析 | `MINERU_TOKEN` 可选 | flash 模式优先 |
-| `local` | 本地视觉模型 | `VISION_LOCAL_MODEL` 可选 | Ollama / LM Studio / llama.cpp |
+| 免费竞速池 | `glm` | `GLM_API_KEY` | 快速视觉理解 |
+| 免费竞速池 | `glm-thinking` | `GLM_API_KEY` | 复杂视觉推理 |
+| 免费竞速池 | `agnes-2.5-flash` | `AGNES_API_KEY` | 默认 endpoint: `https://api.agnes-ai.cn/v1/chat/completions` |
+| 免费竞速池 | `agnes-2.0-flash` | `AGNES_API_KEY` | 默认 endpoint: `https://api.agnes-ai.cn/v1/chat/completions` |
+| 第三方空槽 | `custom-1` | `VISION_CUSTOM_1_*` | 用户自己的 OpenAI-compatible 模型 |
+| 第三方空槽 | `custom-2` | `VISION_CUSTOM_2_*` | 用户自己的 OpenAI-compatible 模型 |
+| 第三方空槽 | `custom-3` | `VISION_CUSTOM_3_*` | 用户自己的 OpenAI-compatible 模型 |
+| OCR | `baidu-ocr` | `BAIDU_API_KEY` + `BAIDU_SECRET_KEY` | 云端 OCR |
+| OCR | `windows-ocr` | 无 | Windows 本地 OCR |
+| 文档 | `mineru` | `MINERU_TOKEN` 可选 | PDF / 文档解析 |
+| 本地兜底 | `local` | `VISION_LOCAL_MODEL` 可选 | Ollama / LM Studio / llama.cpp |
 
 ### 输出格式
-
-所有脚本在 `-Json` 模式下输出统一结构：
 
 ```json
 {
@@ -172,191 +173,148 @@ scripts\setup.ps1 -RemoveKey -Channel <glm|glm-thinking|agnes-2.5-flash|agnes-2.
 }
 ```
 
-主模型通常只需要读取 `result` 字段继续推理；调试时再查看 `tool_used` 和 `metadata`。
+### 隐私和降级
 
-### 目录结构
+云端通道会把文件内容发送给对应服务商。处理合同、证件、医疗、财务等敏感内容时，建议优先使用 Windows OCR、本地模型，或在发送前取得用户确认。
+
+视觉推理降级顺序：
 
 ```text
-SKILL.md
-README.md
-VERSION
-version.json
-agents/openai.yaml
-references/channels.md
-scripts/
-  vision-router.ps1      # 推荐入口：自动判断任务、并发竞速、降级
-  vlm-vision.ps1         # 视觉理解：glm / glm-thinking / agnes / custom / local
-  baidu-ocr.ps1          # 百度 OCR，带 token 缓存
-  windows-ocr.ps1        # Windows 离线 OCR
-  mineru-extract.ps1     # MinerU 文档解析，带结果缓存
-  preflight.ps1          # 通道预检，支持 -Json
-  setup.ps1              # 配置 key、状态和验证
-  local-select.ps1       # 本地视觉模型选型
-  smoke-test.ps1         # 轻量自检
-  check-update.ps1       # 检查 GitHub 上的新版本
-  update-skill.ps1       # 显式更新 git clone 安装
+race(free pool) -> custom-1 -> custom-2 -> custom-3 -> local
 ```
 
-### 缓存策略
-
-- `vlm-vision.ps1` 按图片 hash、prompt、通道和模型缓存结果
-- `baidu-ocr.ps1` 缓存百度 access token
-- `mineru-extract.ps1` 按文件 hash 复用已生成的 Markdown
-
-缓存默认位于用户目录下的 `.ds-vision`，以及系统临时目录中的 MinerU 输出目录。
-
-### 隐私提醒
-
-云端通道会把图片或文档发送给对应服务商。处理合同、证件、医疗、财务或其他敏感内容时，建议优先使用 Windows OCR、本地模型，或在发送前取得用户确认。
-
-### 版本和更新
-
-这个 skill 安装到本地后，不会因为 GitHub 仓库更新而自动同步。
+### 更新
 
 ```powershell
 scripts\check-update.ps1
-scripts\check-update.ps1 -Json
 scripts\check-update.ps1 -Notify
 scripts\update-skill.ps1
 ```
 
-`-Notify` 会在发现新版本时给出非阻断提醒，默认同一个新版本 24 小时最多提醒一次。`update-skill.ps1` 只会更新 git clone 形式安装的目录，并且有本地改动时会拒绝覆盖。
+本地安装不会自动跟随 GitHub 更新。`update-skill.ps1` 只更新 git clone 形式安装的目录，并且有本地改动时会拒绝覆盖。
 
 ---
 
 ## English
 
-### What It Does
+### In One Sentence
 
-`ds-vision-skill` is a vision adapter for text-first agents. It converts visual inputs into text or structured JSON before the main model continues the reasoning.
+`ds-vision-skill` is a vision front-end for text-first agents: it detects the task, chooses the right visual route, races free channels when possible, falls back cleanly, and returns structured JSON to the main model.
 
-It is useful for:
+### First Step After Install: Configure The Free Race Pool
 
-- image and screenshot understanding
-- OCR for receipts, forms, scanned files, and screenshots
-- chart, diagram, UI, code screenshot, and math-image reasoning
-- PDF, paper, report, table, and formula parsing
+The free race pool is the default fast path. Configure it first:
 
-### Highlights
+```powershell
+# GLM enables both glm and glm-thinking
+scripts\setup.ps1 -SetKey -Channel glm -Key <GLM_API_KEY> -Verify
 
-- One recommended entry point: `scripts/vision-router.ps1`
-- Automatic routing across document parsing, OCR, and visual reasoning
-- Concurrent free-channel racing: GLM + Agnes models run in parallel
-- First successful response wins
-- Clear fallback chain: free cloud race -> custom relay -> local runtime
-- Standard JSON output for agent-friendly downstream reasoning
-- Privacy-aware local OCR and local vision fallback
-- Built-in version check and explicit update script
+# Agnes enables both agnes-2.5-flash and agnes-2.0-flash
+scripts\setup.ps1 -SetKey -Channel agnes-2.5-flash -Key <AGNES_API_KEY> -Verify
+```
+
+For image reasoning, these channels run concurrently:
+
+```text
+glm
+glm-thinking
+agnes-2.5-flash
+agnes-2.0-flash
+```
+
+The first successful response wins.
+
+### Optional: Three Third-Party Slots
+
+Users can plug in their own OpenAI-compatible vision models:
+
+```powershell
+scripts\setup.ps1 -SetCustom -Slot 1 -BaseUrl <url> -Key <key> -Model <model> -Verify
+scripts\setup.ps1 -SetCustom -Slot 2 -BaseUrl <url> -Key <key> -Model <model> -Verify
+scripts\setup.ps1 -SetCustom -Slot 3 -BaseUrl <url> -Key <key> -Model <model> -Verify
+```
+
+These become:
+
+```text
+custom-1
+custom-2
+custom-3
+```
+
+They are tried only after the free race pool fails.
 
 ### Architecture
 
 ```mermaid
-flowchart TD
-    A["Input<br/>image / screenshot / PDF / scan"] --> B["vision-router.ps1<br/>single entry point"]
-    B --> C{"Task detection"}
+flowchart LR
+    U["User input<br/>image / screenshot / PDF / scan"] --> R["vision-router.ps1<br/>single entry point"]
 
-    C -->|PDF / document| D["mineru-extract.ps1<br/>MinerU flash -> extract"]
-    C -->|text only| E["OCR<br/>Baidu OCR -> Windows OCR"]
-    C -->|understanding / reasoning| F["VLM race pool<br/>GLM + Agnes"]
+    R --> D["Document parsing<br/>MinerU"]
+    R --> O["OCR<br/>Baidu OCR / Windows OCR"]
+    R --> V["Visual reasoning"]
 
-    F --> F1["glm"]
-    F --> F2["glm-thinking"]
-    F --> F3["agnes-2.5-flash"]
-    F --> F4["agnes-2.0-flash"]
+    V --> F["Free race pool<br/>GLM + Agnes"]
+    V --> C["Third-party slots<br/>custom-1 / custom-2 / custom-3"]
+    V --> L["Local fallback<br/>Ollama / LM Studio / llama.cpp"]
 
-    F1 --> G{"first successful result"}
-    F2 --> G
-    F3 --> G
-    F4 --> G
+    D --> J["JSON Envelope"]
+    O --> J
+    F --> J
+    C --> J
+    L --> J
 
-    G -->|success| J["standard JSON envelope"]
-    G -->|all failed| H["fallback<br/>custom -> local"]
-    H --> J
-    D --> J
-    E --> J
-
-    J --> K["main model reads result"]
-    K --> L["final explanation, reasoning, and answer"]
+    J --> M["Main model<br/>reads result and continues reasoning"]
 ```
 
-### Quick Start
+### Request Flow
 
-Check available channels:
+```mermaid
+flowchart TD
+    A["File + user request"] --> B{"Task type"}
+
+    B -->|PDF / document| C["MinerU<br/>flash -> extract"]
+    B -->|text-only OCR| D["OCR<br/>Baidu -> Windows"]
+    B -->|image understanding| E["start free race pool"]
+
+    E --> E1["glm"]
+    E --> E2["glm-thinking"]
+    E --> E3["agnes-2.5-flash"]
+    E --> E4["agnes-2.0-flash"]
+
+    E1 --> F{"first success"}
+    E2 --> F
+    E3 --> F
+    E4 --> F
+
+    F -->|success| Z["JSON output"]
+    F -->|all failed| G["custom-1"]
+    G -->|failed| H["custom-2"]
+    H -->|failed| I["custom-3"]
+    I -->|failed| K["local"]
+
+    C --> Z
+    D --> Z
+    G -->|success| Z
+    H -->|success| Z
+    I -->|success| Z
+    K --> Z
+```
+
+### Quick Use
 
 ```powershell
 scripts\setup.ps1 -Status
 scripts\preflight.ps1
-```
-
-Use the router:
-
-```powershell
 scripts\vision-router.ps1 -Path <file> -Prompt "Analyze this file" -Json
 ```
 
-OCR:
-
-```powershell
-scripts\vision-router.ps1 -Path <image> -Intent ocr -Json
-```
-
-Complex visual reasoning:
-
-```powershell
-scripts\vision-router.ps1 -Path <image> -Intent reason -Complex -Prompt "Analyze this chart" -Json
-```
-
-Document parsing:
-
-```powershell
-scripts\vision-router.ps1 -Path <pdf> -Intent document -Json
-```
-
-### Configure Channels
-
-GLM:
-
-```powershell
-scripts\setup.ps1 -SetKey -Channel glm -Key <GLM_API_KEY> -Verify
-```
-
-Agnes:
-
-```powershell
-scripts\setup.ps1 -SetKey -Channel agnes-2.5-flash -Key <AGNES_API_KEY> -Verify
-scripts\setup.ps1 -SetKey -Channel agnes-2.0-flash -Key <AGNES_API_KEY> -Verify
-```
-
-Baidu OCR:
-
-```powershell
-scripts\setup.ps1 -SetKey -Channel baidu-ocr -Key <BAIDU_API_KEY> -Secret <BAIDU_SECRET_KEY> -Verify
-```
-
-Custom OpenAI-compatible relay:
-
-```powershell
-scripts\setup.ps1 -SetCustom -BaseUrl <url> -Key <key> -Model <model> -Verify
-```
-
-### Routing Strategy
-
-For image reasoning, configured free cloud channels are launched concurrently:
+### Routing
 
 ```text
-race(glm, glm-thinking, agnes-2.5-flash, agnes-2.0-flash) -> custom -> local
-```
-
-For OCR:
-
-```text
-baidu-ocr -> windows-ocr -> vision reasoning
-```
-
-For documents:
-
-```text
-mineru flash -> mineru extract
+image reasoning: race(glm, glm-thinking, agnes-2.5-flash, agnes-2.0-flash) -> custom-1 -> custom-2 -> custom-3 -> local
+ocr: baidu-ocr -> windows-ocr -> vision reasoning
+document: mineru flash -> mineru extract
 ```
 
 ### JSON Output
@@ -371,18 +329,15 @@ mineru flash -> mineru extract
 }
 ```
 
-### Version and Updates
-
-Installed skills are local copies. Updating GitHub does not automatically update a user's local installation.
+### Version And Updates
 
 ```powershell
 scripts\check-update.ps1
-scripts\check-update.ps1 -Json
 scripts\check-update.ps1 -Notify
 scripts\update-skill.ps1
 ```
 
-`update-skill.ps1` only updates git-clone installations and refuses to overwrite local changes.
+Installed skills are local copies. GitHub updates do not automatically update a user's local installation.
 
 ### License
 

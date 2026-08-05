@@ -6,8 +6,8 @@
 #   setup.ps1 -Status
 #   setup.ps1 -Help
 #   setup.ps1 -SetKey -Channel <ch> -Key <value> [-Secret <value>] [-BaseUrl <url>] [-Verify] [-Force]
-#   setup.ps1 -RemoveKey -Channel <ch|custom>
-#   setup.ps1 -SetCustom -BaseUrl <url> -Key <value> -Model <model> [-Verify] [-Force]
+#   setup.ps1 -RemoveKey -Channel <ch|custom|custom-1|custom-2|custom-3>
+#   setup.ps1 -SetCustom [-Slot 1|2|3] -BaseUrl <url> -Key <value> -Model <model> [-Verify] [-Force]
 #   setup.ps1 -Verify -Channel <ch> [-ImagePath <path>]
 
 param(
@@ -18,13 +18,15 @@ param(
     [switch]$SetCustom,
     [switch]$Verify,
     [switch]$Force,
-    [ValidateSet('glm','glm-thinking','agnes-2.5-flash','agnes-2.0-flash','baidu-ocr','custom')]
+    [ValidateSet('glm','glm-thinking','agnes-2.5-flash','agnes-2.0-flash','baidu-ocr','custom','custom-1','custom-2','custom-3')]
     [string]$Channel = '',
     [string]$Key = '',
     [string]$Secret = '',
     [string]$BaseUrl = '',
     [string]$Model = '',
-    [string]$ImagePath = ''
+    [string]$ImagePath = '',
+    [ValidateSet(1,2,3)]
+    [int]$Slot = 1
 )
 
 $ErrorActionPreference = 'Stop'
@@ -115,8 +117,10 @@ function Show-Status {
         $status = if ($missing.Count -eq 0) { 'configured' } else { 'dormant (missing: ' + ($missing -join ', ') + ')' }
         Write-Output ("- {0} [{1}]: {2}" -f $c, $info.name, $status)
     }
-    $customOk = (Get-EnvValue 'VISION_CUSTOM_API_KEY') -and (Get-EnvValue 'VISION_CUSTOM_BASE_URL') -and (Get-EnvValue 'VISION_CUSTOM_MODEL')
-    Write-Output ("- custom [relay/private]: {0}" -f $(if ($customOk) { 'configured' } else { 'dormant' }))
+    foreach ($slotId in 1..3) {
+        $customOk = (Get-EnvValue "VISION_CUSTOM_${slotId}_API_KEY") -and (Get-EnvValue "VISION_CUSTOM_${slotId}_BASE_URL") -and (Get-EnvValue "VISION_CUSTOM_${slotId}_MODEL")
+        Write-Output ("- custom-{0} [third-party slot]: {1}" -f $slotId, $(if ($customOk) { 'configured' } else { 'dormant' }))
+    }
     Write-Output ("- agnes base url: {0}" -f $(if (Get-EnvValue 'AGNES_BASE_URL') { Get-EnvValue 'AGNES_BASE_URL' } else { 'https://api.agnes-ai.cn/v1/chat/completions (default)' }))
     Write-Output ''
     Write-Output '### Local'
@@ -125,8 +129,8 @@ function Show-Status {
     Write-Output ''
     Write-Output '### Next steps'
     Write-Output '- Run "setup.ps1 -Help" for registration links and per-channel commands.'
-    Write-Output '- Enable a channel: setup.ps1 -SetKey -Channel <name> -Key <key> [-Secret <secret>] -Verify'
-    Write-Output '- Enable custom relay: setup.ps1 -SetCustom -BaseUrl <url> -Key <key> -Model <model>'
+    Write-Output '- First configure free race channels: glm and agnes-2.5-flash.'
+    Write-Output '- Optional third-party slots: setup.ps1 -SetCustom -Slot <1|2|3> -BaseUrl <url> -Key <key> -Model <model>'
 }
 
 function Show-Help {
@@ -142,9 +146,9 @@ function Show-Help {
         Write-Output ("- Enable: setup.ps1 -SetKey -Channel {0} -Key <key>{1}{2} -Verify" -f $c, $secret, $base)
         Write-Output ''
     }
-    Write-Output '### custom (relay / private endpoint)'
-    Write-Output '- Env vars: VISION_CUSTOM_BASE_URL + VISION_CUSTOM_API_KEY + VISION_CUSTOM_MODEL'
-    Write-Output '- Enable: setup.ps1 -SetCustom -BaseUrl <url> -Key <key> -Model <model> -Verify'
+    Write-Output '### custom-1 / custom-2 / custom-3 (third-party OpenAI-compatible slots)'
+    Write-Output '- Env vars: VISION_CUSTOM_<slot>_BASE_URL + VISION_CUSTOM_<slot>_API_KEY + VISION_CUSTOM_<slot>_MODEL'
+    Write-Output '- Enable: setup.ps1 -SetCustom -Slot <1|2|3> -BaseUrl <url> -Key <key> -Model <model> -Verify'
     Write-Output ''
     Write-Output '### local (offline / privacy)'
     Write-Output '- Install Ollama: winget install Ollama.Ollama, then: ollama pull qwen2.5-vl:3b'
@@ -192,33 +196,42 @@ function Do-SetCustom {
         Write-Error 'SetCustom requires -BaseUrl, -Key and -Model.'
         exit 1
     }
-    Set-Item -Path 'Env:VISION_CUSTOM_BASE_URL' -Value $BaseUrl
-    Set-Item -Path 'Env:VISION_CUSTOM_API_KEY' -Value $Key
-    Set-Item -Path 'Env:VISION_CUSTOM_MODEL' -Value $Model
+    $prefix = "VISION_CUSTOM_${Slot}"
+    Set-Item -Path "Env:${prefix}_BASE_URL" -Value $BaseUrl
+    Set-Item -Path "Env:${prefix}_API_KEY" -Value $Key
+    Set-Item -Path "Env:${prefix}_MODEL" -Value $Model
     if ($Verify) {
-        Test-Channel 'custom'
+        Test-Channel "custom-$Slot"
         if ($LASTEXITCODE -ne 0 -and -not $Force) {
-            Write-Output 'Verification failed for custom; settings NOT saved. Use -Force to save anyway.'
+            Write-Output "Verification failed for custom-$Slot; settings NOT saved. Use -Force to save anyway."
             exit 1
         }
     }
-    Set-EnvUser 'VISION_CUSTOM_BASE_URL' $BaseUrl
-    Set-EnvUser 'VISION_CUSTOM_API_KEY' $Key
-    Set-EnvUser 'VISION_CUSTOM_MODEL' $Model
-    Write-Output ("Saved VISION_CUSTOM_BASE_URL={0} VISION_CUSTOM_API_KEY={1} VISION_CUSTOM_MODEL={2} (User scope)" -f $BaseUrl, (Mask $Key), $Model)
+    Set-EnvUser "${prefix}_BASE_URL" $BaseUrl
+    Set-EnvUser "${prefix}_API_KEY" $Key
+    Set-EnvUser "${prefix}_MODEL" $Model
+    Write-Output ("Saved {0}_BASE_URL={1} {0}_API_KEY={2} {0}_MODEL={3} (User scope)" -f $prefix, $BaseUrl, (Mask $Key), $Model)
     if ($Verify) { Write-Output 'Verification: OK' }
 }
 
 function Do-RemoveKey {
     if (-not $Channel) {
-        Write-Error 'RemoveKey requires -Channel <name|custom>.'
+        Write-Error 'RemoveKey requires -Channel <name|custom|custom-1|custom-2|custom-3>.'
         exit 1
     }
     if ($Channel -eq 'custom') {
-        foreach ($n in @('VISION_CUSTOM_BASE_URL','VISION_CUSTOM_API_KEY','VISION_CUSTOM_MODEL')) {
+        foreach ($n in @('VISION_CUSTOM_BASE_URL','VISION_CUSTOM_API_KEY','VISION_CUSTOM_MODEL','VISION_CUSTOM_1_BASE_URL','VISION_CUSTOM_1_API_KEY','VISION_CUSTOM_1_MODEL','VISION_CUSTOM_2_BASE_URL','VISION_CUSTOM_2_API_KEY','VISION_CUSTOM_2_MODEL','VISION_CUSTOM_3_BASE_URL','VISION_CUSTOM_3_API_KEY','VISION_CUSTOM_3_MODEL')) {
             Remove-EnvUser $n
         }
-        Write-Output 'Removed custom relay settings (User scope).'
+        Write-Output 'Removed custom relay settings, including custom-1/custom-2/custom-3 (User scope).'
+        exit 0
+    }
+    if ($Channel -like 'custom-*') {
+        $slotId = $Channel.Replace('custom-', '')
+        foreach ($n in @("VISION_CUSTOM_${slotId}_BASE_URL","VISION_CUSTOM_${slotId}_API_KEY","VISION_CUSTOM_${slotId}_MODEL")) {
+            Remove-EnvUser $n
+        }
+        Write-Output ("Removed {0} settings (User scope)." -f $Channel)
         exit 0
     }
     $info = $channels[$Channel]
@@ -235,14 +248,14 @@ if ($primaryCount -ne 1 -and -not ($primaryCount -eq 0 -and $Verify)) {
     Write-Output '  setup.ps1 -Status'
     Write-Output '  setup.ps1 -Help'
     Write-Output '  setup.ps1 -SetKey -Channel <ch> -Key <value> [-Secret <value>] [-BaseUrl <url>] [-Verify] [-Force]'
-    Write-Output '  setup.ps1 -RemoveKey -Channel <ch|custom>'
-    Write-Output '  setup.ps1 -SetCustom -BaseUrl <url> -Key <value> -Model <model> [-Verify] [-Force]'
+    Write-Output '  setup.ps1 -RemoveKey -Channel <ch|custom|custom-1|custom-2|custom-3>'
+    Write-Output '  setup.ps1 -SetCustom [-Slot 1|2|3] -BaseUrl <url> -Key <value> -Model <model> [-Verify] [-Force]'
     Write-Output '  setup.ps1 -Verify -Channel <ch> [-ImagePath <path>]'
     exit 1
 }
 
 if ($Verify -and -not ($SetKey -or $SetCustom)) {
-    if (-not $Channel) { Write-Error 'Verify requires -Channel <name|custom>.'; exit 1 }
+    if (-not $Channel) { Write-Error 'Verify requires -Channel <name|custom|custom-1|custom-2|custom-3>.'; exit 1 }
     Test-Channel $Channel
     exit $LASTEXITCODE
 }
