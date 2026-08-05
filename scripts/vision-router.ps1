@@ -132,8 +132,6 @@ if ($Intent -eq 'ocr') {
 
 if ($Intent -eq 'reason') {
     $vlm = Join-Path $scriptDir 'vlm-vision.ps1'
-    $baseArgs = @('-ImagePath', $Path, '-Prompt', $Prompt, '-Json')
-    if ($NoCache) { $baseArgs += '-NoCache' }
 
     $channels = @()
     if ($Complex) { $channels += 'glm-thinking' } else { $channels += 'glm' }
@@ -143,7 +141,13 @@ if ($Intent -eq 'reason') {
 
     foreach ($ch in $channels) {
         if (($ch -eq 'glm' -or $ch -eq 'glm-thinking') -and -not (Get-EnvValue 'GLM_API_KEY')) { continue }
-        $attempts += Run-Step $ch { & $vlm @baseArgs -Channel $ch }
+        # Array splatting passes elements positionally, so '-ImagePath' would be
+        # bound as a value instead of a parameter name. Use literal named args.
+        if ($NoCache) {
+            $attempts += Run-Step $ch { & $vlm -ImagePath $Path -Prompt $Prompt -Json -NoCache -Channel $ch }
+        } else {
+            $attempts += Run-Step $ch { & $vlm -ImagePath $Path -Prompt $Prompt -Json -Channel $ch }
+        }
         if ($attempts[-1].code -eq 0) { Write-Output $attempts[-1].text; exit 0 }
     }
 }
