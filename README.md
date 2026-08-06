@@ -1,209 +1,48 @@
-# ds-vision-skill
+# DS Vision Skill
 
-Language: [中文](#中文) | [English](#english)
+<p align="center">
+  <strong>A fast, fallback-aware vision layer for text-first agents.</strong>
+</p>
 
-`ds-vision-skill` is a vision layer for text-first agents. It routes images, screenshots, PDFs, scans, charts, UI captures, code screenshots, and math images into OCR, document parsing, or visual reasoning, then returns a clean JSON envelope for the main model to reason over.
+<p align="center">
+  <a href="README.zh-CN.md">中文</a>
+  ·
+  <a href="SKILL.md">Skill spec</a>
+  ·
+  <a href="references/channels.md">Channels</a>
+  ·
+  <a href="LICENSE">License</a>
+</p>
 
-The recommended setup is:
+<p align="center">
+  <a href="https://github.com/Sorwcyra/ds-vision-skill/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/Sorwcyra/ds-vision-skill?style=flat&logo=github&label=Stars"></a>
+  <a href="https://github.com/Sorwcyra/ds-vision-skill/forks"><img alt="Forks" src="https://img.shields.io/github/forks/Sorwcyra/ds-vision-skill?style=flat&logo=github&label=Forks"></a>
+  <a href="https://github.com/Sorwcyra/ds-vision-skill/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/Sorwcyra/ds-vision-skill?style=flat&label=last%20commit"></a>
+  <a href="https://github.com/Sorwcyra/ds-vision-skill/issues"><img alt="Issues" src="https://img.shields.io/github/issues/Sorwcyra/ds-vision-skill?style=flat&label=issues"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Sorwcyra/ds-vision-skill?style=flat&label=license"></a>
+  <a href="VERSION"><img alt="Version" src="https://img.shields.io/badge/version-0.4.1-0ea5e9?style=flat"></a>
+  <a href="https://github.com/Sorwcyra/ds-vision-skill"><img alt="Auto sync" src="https://img.shields.io/badge/auto--sync-ready-16a34a?style=flat"></a>
+</p>
 
-```text
-first configure the free race pool -> optionally fill custom-1/custom-2/custom-3 -> use vision-router.ps1
-```
+`ds-vision-skill` gives Codex, DeepSeek, and other text-first agents a clean way to work with images, screenshots, scans, PDFs, charts, UI captures, code screenshots, and math images.
 
----
+It does not replace the main model. It detects the visual task, chooses the best route, races fast cloud vision channels when available, falls back through custom and local options, and returns one structured JSON envelope for the main model to reason over.
 
-## 中文
+## Why It Exists
 
-### 一句话
+Many coding and reasoning agents are excellent with text but awkward around visual input. This skill acts as a dedicated front-end layer:
 
-这是给 Codex / DeepSeek / 纯文本推理模型用的“视觉前置层”。用户给一张图或一个 PDF，它负责识别任务、选择通道、并发竞速、失败降级，最后把可读结果交给主模型。
+| Need | Route |
+|---|---|
+| Understand a screenshot, chart, UI, photo, or math image | Vision reasoning race pool |
+| Extract plain text from an image or scan | Baidu OCR, then Windows OCR |
+| Parse a PDF, report, paper, or multi-page document | MinerU |
+| Use a private or relay model | `custom-1`, `custom-2`, `custom-3` |
+| Keep sensitive work local | local runtime fallback |
 
-### 下载后第一步：配置免费竞速池
+## Quick Start
 
-免费竞速池是默认主路径。建议用户安装 skill 后优先配置这两组 key：
-
-```powershell
-# GLM: 同一个 key 同时启用 glm + glm-thinking
-scripts\setup.ps1 -SetKey -Channel glm -Key <GLM_API_KEY> -Verify
-
-# Agnes: 同一个 key 同时启用 agnes-2.5-flash + agnes-2.0-flash
-scripts\setup.ps1 -SetKey -Channel agnes-2.5-flash -Key <AGNES_API_KEY> -Verify
-```
-
-配置完成后，图片理解会并发调用：
-
-```text
-glm
-glm-thinking
-agnes-2.5-flash
-agnes-2.0-flash
-```
-
-谁先成功返回，就采用谁的结果。这个设计的目标是快：免费通道一起跑，不等最慢的那个。
-
-### 可选：3 个第三方模型空槽
-
-如果用户有自己的 OpenAI-compatible 视觉模型、中转服务或私有模型，可以填入这 3 个空闲通道：
-
-```powershell
-scripts\setup.ps1 -SetCustom -Slot 1 -BaseUrl <url> -Key <key> -Model <model> -Verify
-scripts\setup.ps1 -SetCustom -Slot 2 -BaseUrl <url> -Key <key> -Model <model> -Verify
-scripts\setup.ps1 -SetCustom -Slot 3 -BaseUrl <url> -Key <key> -Model <model> -Verify
-```
-
-它们对应：
-
-```text
-custom-1
-custom-2
-custom-3
-```
-
-免费竞速池全部失败后，才会按顺序尝试这 3 个第三方槽位。
-
-### 系统架构
-
-```mermaid
-flowchart LR
-    U["用户输入<br/>图片 / 截图 / PDF / 扫描件"] --> R["vision-router.ps1<br/>统一入口"]
-
-    R --> D["文档解析层<br/>MinerU"]
-    R --> O["OCR 层<br/>Baidu OCR / Windows OCR"]
-    R --> V["视觉推理层"]
-
-    V --> F["免费竞速池<br/>GLM + Agnes"]
-    V --> C["第三方扩展槽<br/>custom-1 / custom-2 / custom-3"]
-    V --> L["本地兜底<br/>Ollama / LM Studio / llama.cpp"]
-
-    D --> J["JSON Envelope"]
-    O --> J
-    F --> J
-    C --> J
-    L --> J
-
-    J --> M["主模型<br/>读取 result 并继续推理"]
-```
-
-### 请求流程
-
-```mermaid
-flowchart TD
-    A["输入文件 + 用户需求"] --> B{"任务类型"}
-
-    B -->|PDF / 文档| C["MinerU<br/>flash -> extract"]
-    B -->|纯文字识别| D["OCR<br/>Baidu -> Windows"]
-    B -->|图片理解 / 推理| E["启动免费竞速池"]
-
-    E --> E1["glm"]
-    E --> E2["glm-thinking"]
-    E --> E3["agnes-2.5-flash"]
-    E --> E4["agnes-2.0-flash"]
-
-    E1 --> F{"第一个成功返回"}
-    E2 --> F
-    E3 --> F
-    E4 --> F
-
-    F -->|成功| Z["输出 JSON"]
-    F -->|全部失败| G["custom-1"]
-    G -->|失败| H["custom-2"]
-    H -->|失败| I["custom-3"]
-    I -->|失败| K["local"]
-
-    C --> Z
-    D --> Z
-    G -->|成功| Z
-    H -->|成功| Z
-    I -->|成功| Z
-    K --> Z
-```
-
-### 快速使用
-
-检查状态：
-
-```powershell
-scripts\setup.ps1 -Status
-scripts\preflight.ps1
-```
-
-统一入口：
-
-```powershell
-scripts\vision-router.ps1 -Path <文件路径> -Prompt "请分析这个文件" -Json
-```
-
-指定 OCR：
-
-```powershell
-scripts\vision-router.ps1 -Path <图片路径> -Intent ocr -Json
-```
-
-指定文档解析：
-
-```powershell
-scripts\vision-router.ps1 -Path <PDF路径> -Intent document -Json
-```
-
-### 通道表
-
-| 分组 | 通道 | 环境变量 | 说明 |
-|---|---|---|---|
-| 免费竞速池 | `glm` | `GLM_API_KEY` | 快速视觉理解 |
-| 免费竞速池 | `glm-thinking` | `GLM_API_KEY` | 复杂视觉推理 |
-| 免费竞速池 | `agnes-2.5-flash` | `AGNES_API_KEY` | 默认 endpoint: `https://api.agnes-ai.cn/v1/chat/completions` |
-| 免费竞速池 | `agnes-2.0-flash` | `AGNES_API_KEY` | 默认 endpoint: `https://api.agnes-ai.cn/v1/chat/completions` |
-| 第三方空槽 | `custom-1` | `VISION_CUSTOM_1_*` | 用户自己的 OpenAI-compatible 模型 |
-| 第三方空槽 | `custom-2` | `VISION_CUSTOM_2_*` | 用户自己的 OpenAI-compatible 模型 |
-| 第三方空槽 | `custom-3` | `VISION_CUSTOM_3_*` | 用户自己的 OpenAI-compatible 模型 |
-| OCR | `baidu-ocr` | `BAIDU_API_KEY` + `BAIDU_SECRET_KEY` | 云端 OCR |
-| OCR | `windows-ocr` | 无 | Windows 本地 OCR |
-| 文档 | `mineru` | `MINERU_TOKEN` 可选 | PDF / 文档解析 |
-| 本地兜底 | `local` | `VISION_LOCAL_MODEL` 可选 | Ollama / LM Studio / llama.cpp |
-
-### 输出格式
-
-```json
-{
-  "task_type": "image_reasoning | document_parsing | ocr",
-  "tool_used": "actual tool or model",
-  "confidence": "high | medium | low",
-  "result": "识别、解析或理解后的内容",
-  "metadata": {}
-}
-```
-
-### 隐私和降级
-
-云端通道会把文件内容发送给对应服务商。处理合同、证件、医疗、财务等敏感内容时，建议优先使用 Windows OCR、本地模型，或在发送前取得用户确认。
-
-视觉推理降级顺序：
-
-```text
-race(free pool) -> custom-1 -> custom-2 -> custom-3 -> local
-```
-
-### 更新
-
-```powershell
-scripts\check-update.ps1
-scripts\check-update.ps1 -Notify
-scripts\update-skill.ps1
-```
-
-本地安装不会自动跟随 GitHub 更新。`update-skill.ps1` 只更新 git clone 形式安装的目录，并且有本地改动时会拒绝覆盖。
-
----
-
-## English
-
-### In One Sentence
-
-`ds-vision-skill` is a vision front-end for text-first agents: it detects the task, chooses the right visual route, races free channels when possible, falls back cleanly, and returns structured JSON to the main model.
-
-### First Step After Install: Configure The Free Race Pool
-
-The free race pool is the default fast path. Configure it first:
+Configure the free race pool first:
 
 ```powershell
 # GLM enables both glm and glm-thinking
@@ -213,43 +52,28 @@ scripts\setup.ps1 -SetKey -Channel glm -Key <GLM_API_KEY> -Verify
 scripts\setup.ps1 -SetKey -Channel agnes-2.5-flash -Key <AGNES_API_KEY> -Verify
 ```
 
-For image reasoning, these channels run concurrently:
-
-```text
-agnes-2.5-flash
-agnes-2.0-flash
-glm
-glm-thinking
-```
-
-The first successful response wins.
-
-In `auto` mode, image files route to image reasoning by default, so the free
-race pool is tried first. Use `-Intent ocr` for OCR-only extraction, or
-`-AccurateOcr` when a scanned or low-quality text image should go straight to
-the OCR route.
-
-### Optional: Three Third-Party Slots
-
-Users can plug in their own OpenAI-compatible vision models:
+Check your environment:
 
 ```powershell
-scripts\setup.ps1 -SetCustom -Slot 1 -BaseUrl <url> -Key <key> -Model <model> -Verify
-scripts\setup.ps1 -SetCustom -Slot 2 -BaseUrl <url> -Key <key> -Model <model> -Verify
-scripts\setup.ps1 -SetCustom -Slot 3 -BaseUrl <url> -Key <key> -Model <model> -Verify
+scripts\setup.ps1 -Status
+scripts\preflight.ps1
 ```
 
-These become:
+Analyze any supported file through the single router:
 
-```text
-custom-1
-custom-2
-custom-3
+```powershell
+scripts\vision-router.ps1 -Path <file> -Prompt "Analyze this file" -Json
 ```
 
-They are tried only after the free race pool fails.
+Use an explicit route when the task is clear:
 
-### Architecture
+```powershell
+scripts\vision-router.ps1 -Path <image> -Intent ocr -Json
+scripts\vision-router.ps1 -Path <pdf> -Intent document -Json
+scripts\vision-router.ps1 -Path <image> -Intent reason -Complex -Json
+```
+
+## Routing Model
 
 ```mermaid
 flowchart LR
@@ -259,11 +83,11 @@ flowchart LR
     R --> O["OCR<br/>Baidu OCR / Windows OCR"]
     R --> V["Visual reasoning"]
 
-    V --> F["Free race pool<br/>GLM + Agnes"]
+    V --> F["Free race pool<br/>Agnes + GLM"]
     V --> C["Third-party slots<br/>custom-1 / custom-2 / custom-3"]
     V --> L["Local fallback<br/>Ollama / LM Studio / llama.cpp"]
 
-    D --> J["JSON Envelope"]
+    D --> J["JSON envelope"]
     O --> J
     F --> J
     C --> J
@@ -272,58 +96,49 @@ flowchart LR
     J --> M["Main model<br/>reads result and continues reasoning"]
 ```
 
-### Request Flow
-
-```mermaid
-flowchart TD
-    A["File + user request"] --> B{"Task type"}
-
-    B -->|PDF / document| C["MinerU<br/>flash -> extract"]
-    B -->|explicit OCR / AccurateOcr| D["OCR<br/>Baidu -> Windows"]
-    B -->|image default| E["start free race pool"]
-
-    E --> E1["agnes-2.5-flash"]
-    E --> E2["agnes-2.0-flash"]
-    E --> E3["glm"]
-    E --> E4["glm-thinking"]
-
-    E1 --> F{"first success"}
-    E2 --> F
-    E3 --> F
-    E4 --> F
-
-    F -->|success| Z["JSON output"]
-    F -->|all failed| G["custom-1"]
-    G -->|failed| H["custom-2"]
-    H -->|failed| I["custom-3"]
-    I -->|failed| K["local"]
-
-    C --> Z
-    D --> Z
-    G -->|success| Z
-    H -->|success| Z
-    I -->|success| Z
-    K --> Z
-```
-
-### Quick Use
-
-```powershell
-scripts\setup.ps1 -Status
-scripts\preflight.ps1
-scripts\vision-router.ps1 -Path <file> -Prompt "Analyze this file" -Json
-```
-
-### Routing
+### Fallback Order
 
 ```text
 image reasoning: race(agnes-2.5-flash, agnes-2.0-flash, glm, glm-thinking) -> custom-1 -> custom-2 -> custom-3 -> local
 ocr: baidu-ocr -> windows-ocr -> vision reasoning
-auto image default: image reasoning / free race pool first
 document: mineru flash -> mineru extract
 ```
 
-### JSON Output
+In `auto` mode, image files go to visual reasoning first. Use `-Intent ocr` for OCR-only extraction, or `-AccurateOcr` for scanned and low-quality text images.
+
+## Supported Channels
+
+| Group | Channel | Environment | Purpose |
+|---|---|---|---|
+| Free race pool | `agnes-2.5-flash` | `AGNES_API_KEY` | fast OpenAI-compatible vision |
+| Free race pool | `agnes-2.0-flash` | `AGNES_API_KEY` | backup fast vision |
+| Free race pool | `glm` | `GLM_API_KEY` | fast GLM visual understanding |
+| Free race pool | `glm-thinking` | `GLM_API_KEY` | deeper visual reasoning |
+| Third-party slots | `custom-1` | `VISION_CUSTOM_1_*` | user-owned OpenAI-compatible model |
+| Third-party slots | `custom-2` | `VISION_CUSTOM_2_*` | user-owned OpenAI-compatible model |
+| Third-party slots | `custom-3` | `VISION_CUSTOM_3_*` | user-owned OpenAI-compatible model |
+| OCR | `baidu-ocr` | `BAIDU_API_KEY` + `BAIDU_SECRET_KEY` | cloud OCR |
+| OCR | `windows-ocr` | none | local Windows OCR |
+| Document parsing | `mineru` | optional `MINERU_TOKEN` | PDF and document parsing |
+| Local fallback | `local` | optional `VISION_LOCAL_MODEL` | Ollama, LM Studio, or llama.cpp |
+
+See [references/channels.md](references/channels.md) for the full channel table.
+
+## Third-Party Slots
+
+Plug in any OpenAI-compatible vision endpoint:
+
+```powershell
+scripts\setup.ps1 -SetCustom -Slot 1 -BaseUrl <url> -Key <key> -Model <model> -Verify
+scripts\setup.ps1 -SetCustom -Slot 2 -BaseUrl <url> -Key <key> -Model <model> -Verify
+scripts\setup.ps1 -SetCustom -Slot 3 -BaseUrl <url> -Key <key> -Model <model> -Verify
+```
+
+The router tries these slots only after the free race pool fails.
+
+## JSON Contract
+
+Every tool emits the same shape in `-Json` mode:
 
 ```json
 {
@@ -335,7 +150,35 @@ document: mineru flash -> mineru extract
 }
 ```
 
-### Version And Updates
+The main model should read `result` first, then use `tool_used`, `confidence`, and `metadata` when it needs to explain routing or fallback behavior.
+
+## Star History
+
+<a href="https://star-history.com/#Sorwcyra/ds-vision-skill&Date">
+  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Sorwcyra/ds-vision-skill&type=Date">
+</a>
+
+## Contributors
+
+Contributions are welcome: bug reports, channel fixes, docs improvements, new routing strategies, and better local-model support all help.
+
+<a href="https://github.com/Sorwcyra/ds-vision-skill/graphs/contributors">
+  <img alt="Contributors" src="https://contrib.rocks/image?repo=Sorwcyra/ds-vision-skill">
+</a>
+
+Before opening a pull request:
+
+1. Keep PowerShell source ASCII-only.
+2. Keep user-facing Markdown in UTF-8.
+3. Add or update routing docs when a channel changes.
+4. Run the smoke or preflight checks when the change touches scripts.
+
+```powershell
+scripts\preflight.ps1
+scripts\smoke-test.ps1
+```
+
+## Updates
 
 ```powershell
 scripts\check-update.ps1
@@ -345,6 +188,10 @@ scripts\update-skill.ps1
 
 Installed skills are local copies. GitHub updates do not automatically update a user's local installation.
 
-### License
+## Privacy
 
-MIT
+Cloud channels send file content to the corresponding provider. For contracts, IDs, medical material, financial files, or other sensitive content, prefer Windows OCR or a local model, or ask for confirmation before sending files to cloud services.
+
+## License
+
+Released under the [MIT License](LICENSE).
