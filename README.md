@@ -155,7 +155,7 @@ The main model should read `result` first, then use `tool_used`, `confidence`, a
 ## Star History
 
 <a href="https://www.star-history.com/?repos=Sorwcyra%2Fds-vision-skill&type=date&legend=top-left">
-  <img alt="Star History Chart" src="assets/star-history.svg">
+  <img alt="Star History Chart" src="assets/star-history.png">
 </a>
 
 ## Contributors
