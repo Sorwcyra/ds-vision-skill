@@ -1,4 +1,4 @@
-# ds-vison-skill
+# ds-vision-skill
 
 <p align="center">
   <strong>给纯文本智能体使用的快速、可降级视觉前置层。</strong>

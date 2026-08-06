@@ -1,4 +1,4 @@
-# ds-vison-skill
+# ds-vision-skill
 
 <p align="center">
   <strong>A fast, fallback-aware vision layer for text-first agents.</strong>
