@@ -1,0 +1,33 @@
+name: Star History
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */12 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: star-history
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Render Star History
+        uses: narayann7/star-history-action@v1
+        with:
+          repos: Sorwcyra/ds-vision-skill
+          output-dir: assets
+          token: ${{ secrets.STAR_HISTORY_TOKEN || github.token }}
+          type: Date
+          themes: light,dark
+          width: 980
+          update-readme: false
+          commit: true
+          commit-message: "Update Star History chart"
