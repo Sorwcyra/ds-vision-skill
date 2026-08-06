@@ -24,7 +24,7 @@
   <a href="https://github.com/Sorwcyra/ds-vision-skill"><img alt="Auto sync" src="https://img.shields.io/badge/auto--sync-ready-16a34a?style=flat"></a>
 </p>
 
-`ds-vision-skill` gives Codex, DeepSeek, and other text-first agents a clean way to work with images, screenshots, scans, PDFs, charts, UI captures, code screenshots, and math images.
+Helps text-first agents work naturally with images, screenshots, scans, PDFs, charts, UI captures, code screenshots, and math images.
 
 It does not replace the main model. It detects the visual task, chooses the best route, races fast cloud vision channels when available, falls back through custom and local options, and returns one structured JSON envelope for the main model to reason over.
 
