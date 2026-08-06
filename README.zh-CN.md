@@ -154,8 +154,12 @@ scripts\setup.ps1 -SetCustom -Slot 3 -BaseUrl <url> -Key <key> -Model <model> -V
 
 ## Star 趋势
 
-<a href="https://star-history.com/#Sorwcyra/ds-vision-skill&Date">
-  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Sorwcyra/ds-vision-skill&type=Date">
+<a href="https://www.star-history.com/?repos=Sorwcyra%2Fds-vision-skill&type=date&legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Sorwcyra/ds-vision-skill&type=date&theme=dark&legend=top-left&sealed_token=m_42FuIg9cYUVSZf_8egOVRMbmXTPWCY9-dA4oj2EneleqdSY26W7mvCXBjjpnPtnDG6R0oyYgr_Oq-zgJ3R2dF6A7EoVtpFciZTwLEZZPkaYzC319tEwQ" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Sorwcyra/ds-vision-skill&type=date&legend=top-left&sealed_token=m_42FuIg9cYUVSZf_8egOVRMbmXTPWCY9-dA4oj2EneleqdSY26W7mvCXBjjpnPtnDG6R0oyYgr_Oq-zgJ3R2dF6A7EoVtpFciZTwLEZZPkaYzC319tEwQ" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Sorwcyra/ds-vision-skill&type=date&legend=top-left&sealed_token=m_42FuIg9cYUVSZf_8egOVRMbmXTPWCY9-dA4oj2EneleqdSY26W7mvCXBjjpnPtnDG6R0oyYgr_Oq-zgJ3R2dF6A7EoVtpFciZTwLEZZPkaYzC319tEwQ" />
+  </picture>
 </a>
 
 ## 贡献者
