@@ -24,7 +24,7 @@
   <a href="https://github.com/Sorwcyra/ds-vision-skill"><img alt="Auto sync" src="https://img.shields.io/badge/auto--sync-ready-16a34a?style=flat"></a>
 </p>
 
-`ds-vision-skill` 让 Codex、DeepSeek 和其他纯文本智能体更自然地处理图片、截图、扫描件、PDF、图表、UI 截图、代码截图和数学题图片。
+让纯文本智能体更自然地处理图片、截图、扫描件、PDF、图表、UI 截图、代码截图和数学题图片。
 
 它不替代主模型，而是作为视觉前置层：识别任务、选择路线、并发调用可用的快速视觉通道、在失败时逐级降级，最后返回统一的 JSON，交给主模型继续推理。
 
