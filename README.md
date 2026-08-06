@@ -155,11 +155,7 @@ The main model should read `result` first, then use `tool_used`, `confidence`, a
 ## Star History
 
 <a href="https://www.star-history.com/?repos=Sorwcyra%2Fds-vision-skill&type=date&legend=top-left">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Sorwcyra/ds-vision-skill&type=date&theme=dark&legend=top-left&sealed_token=5xK_NQKmEnXTUliCm0qCDrKXEm1J3YTNpmFmLHRDWwI8IABqNMBPVi7dZHHT8U9BAZkaIkKBSIHY1SA5jUrPLiQ9JNc2G9ScE4SuVyaQT_byn6HeRn_kIg" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Sorwcyra/ds-vision-skill&type=date&legend=top-left&sealed_token=5xK_NQKmEnXTUliCm0qCDrKXEm1J3YTNpmFmLHRDWwI8IABqNMBPVi7dZHHT8U9BAZkaIkKBSIHY1SA5jUrPLiQ9JNc2G9ScE4SuVyaQT_byn6HeRn_kIg" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Sorwcyra/ds-vision-skill&type=date&legend=top-left&sealed_token=5xK_NQKmEnXTUliCm0qCDrKXEm1J3YTNpmFmLHRDWwI8IABqNMBPVi7dZHHT8U9BAZkaIkKBSIHY1SA5jUrPLiQ9JNc2G9ScE4SuVyaQT_byn6HeRn_kIg" />
-  </picture>
+  <img alt="Star History Chart" src="assets/star-history.svg">
 </a>
 
 ## Contributors

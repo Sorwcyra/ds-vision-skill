@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560" role="img" aria-labelledby="title desc">
+  <title id="title">Star History Chart</title>
+  <desc id="desc">Placeholder shown until the scheduled workflow successfully refreshes the chart from Star History.</desc>
+  <rect width="980" height="560" fill="#ffffff"/>
+  <rect x="1" y="1" width="978" height="558" rx="8" fill="#f8fafc" stroke="#d0d7de"/>
+  <text x="490" y="244" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#24292f">Star History</text>
+  <text x="490" y="286" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#57606a">Waiting for the scheduled workflow to refresh this chart.</text>
+  <text x="490" y="320" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#6e7781">If Star History is rate-limited, the last successful chart will remain here.</text>
+</svg>
