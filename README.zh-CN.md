@@ -20,7 +20,7 @@
   <a href="https://github.com/Sorwcyra/ds-vision-skill/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/Sorwcyra/ds-vision-skill?style=flat&label=last%20commit"></a>
   <a href="https://github.com/Sorwcyra/ds-vision-skill/issues"><img alt="Issues" src="https://img.shields.io/github/issues/Sorwcyra/ds-vision-skill?style=flat&label=issues"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Sorwcyra/ds-vision-skill?style=flat&label=license"></a>
-  <a href="VERSION"><img alt="Version" src="https://img.shields.io/badge/version-0.4.1-0ea5e9?style=flat"></a>
+  <a href="VERSION"><img alt="Version" src="https://img.shields.io/badge/version-0.4.2-0ea5e9?style=flat"></a>
   <a href="https://github.com/Sorwcyra/ds-vision-skill"><img alt="Auto sync" src="https://img.shields.io/badge/auto--sync-ready-16a34a?style=flat"></a>
 </p>
 

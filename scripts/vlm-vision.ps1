@@ -10,6 +10,10 @@ param(
     [string]$Model = '',
     [string]$BaseUrl = '',
     [string]$ApiKey = '',
+    [string]$PreparedImageJson = '',
+    [string]$PreparedImageDataUrlFile = '',
+    [string]$PreparedImageSha256 = '',
+    [double]$PreparedImageSizeMB = 0,
     [switch]$Json,
     [switch]$NoCache,
     [int]$TimeoutSec = 90
@@ -107,9 +111,42 @@ if ($Channel -eq 'local') {
 
 $chatUrl = Get-ChatUrl $chatUrl
 
+$preparedImage = $null
+if ($PreparedImageDataUrlFile) {
+    if (-not (Test-Path -LiteralPath $PreparedImageDataUrlFile)) {
+        Write-Err "ERROR: prepared image data URL file not found: $PreparedImageDataUrlFile"
+        exit 1
+    }
+    if (-not $PreparedImageSha256) {
+        Write-Err 'ERROR: -PreparedImageSha256 is required with -PreparedImageDataUrlFile.'
+        exit 1
+    }
+    $preparedImage = [pscustomobject]@{
+        image_sha256 = $PreparedImageSha256
+        size_mb      = $PreparedImageSizeMB
+        data_url_file = $PreparedImageDataUrlFile
+        data_url     = ''
+    }
+} elseif ($PreparedImageJson) {
+    if (-not (Test-Path -LiteralPath $PreparedImageJson)) {
+        Write-Err "ERROR: prepared image payload not found: $PreparedImageJson"
+        exit 1
+    }
+    try {
+        $preparedImage = Get-Content -Raw -LiteralPath $PreparedImageJson | ConvertFrom-Json
+    } catch {
+        Write-Err "ERROR: prepared image payload is invalid JSON: $($_.Exception.Message)"
+        exit 1
+    }
+    if (-not $preparedImage.image_sha256 -or -not $preparedImage.data_url) {
+        Write-Err 'ERROR: prepared image payload is missing image_sha256 or data_url.'
+        exit 1
+    }
+}
+
 # --- cache lookup (cost optimization: reuse identical requests) ---
 $cacheDir = Join-Path $env:USERPROFILE '.ds-vision\cache'
-$imgHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $ImagePath).Hash
+$imgHash = if ($preparedImage) { [string]$preparedImage.image_sha256 } else { (Get-FileHash -Algorithm SHA256 -LiteralPath $ImagePath).Hash }
 $shaObj = [System.Security.Cryptography.SHA256]::Create()
 $cacheInput = [Text.Encoding]::UTF8.GetBytes(($imgHash + '|' + $Prompt + '|' + $Channel + '|' + $resolvedModel))
 $cacheKey = ([BitConverter]::ToString($shaObj.ComputeHash($cacheInput))).Replace('-', '').ToLower()
@@ -137,25 +174,39 @@ if (-not $resolvedKey -and $Channel -ne 'local') {
     exit 2
 }
 
-# --- encode image ---
-$bytes = [IO.File]::ReadAllBytes($ImagePath)
-$sizeMB = [Math]::Round($bytes.Length / 1MB, 2)
-if ($sizeMB -gt 15) {
-    Write-Err "ERROR: image too large (${sizeMB} MB). Downscale it first or use MinerU for documents."
-    exit 1
-}
-$b64 = [Convert]::ToBase64String($bytes)
-$mime = switch ([IO.Path]::GetExtension($ImagePath).ToLower()) {
-    '.jpg'  { 'image/jpeg' }
-    '.jpeg' { 'image/jpeg' }
-    '.png'  { 'image/png' }
-    '.webp' { 'image/webp' }
-    '.gif'  { 'image/gif' }
-    '.bmp'  { 'image/bmp' }
-    default { 'image/png' }
+# --- encode image (or reuse a router-prepared payload during channel races) ---
+if ($preparedImage) {
+    $sizeMB = [double]$preparedImage.size_mb
+    if ($sizeMB -gt 15) {
+        Write-Err "ERROR: image too large (${sizeMB} MB). Downscale it first or use MinerU for documents."
+        exit 1
+    }
+    if ($preparedImage.data_url_file) {
+        $dataUrl = [System.IO.File]::ReadAllText($preparedImage.data_url_file, [System.Text.Encoding]::UTF8)
+    } else {
+        $dataUrl = [string]$preparedImage.data_url
+    }
+} else {
+    $bytes = [IO.File]::ReadAllBytes($ImagePath)
+    $sizeMB = [Math]::Round($bytes.Length / 1MB, 2)
+    if ($sizeMB -gt 15) {
+        Write-Err "ERROR: image too large (${sizeMB} MB). Downscale it first or use MinerU for documents."
+        exit 1
+    }
+    $b64 = [Convert]::ToBase64String($bytes)
+    $mime = switch ([IO.Path]::GetExtension($ImagePath).ToLower()) {
+        '.jpg'  { 'image/jpeg' }
+        '.jpeg' { 'image/jpeg' }
+        '.png'  { 'image/png' }
+        '.webp' { 'image/webp' }
+        '.gif'  { 'image/gif' }
+        '.bmp'  { 'image/bmp' }
+        default { 'image/png' }
+    }
+    $dataUrl = "data:$mime;base64,$b64"
 }
 
-$content = @(@{ type = 'image_url'; image_url = @{ url = "data:$mime;base64,$b64" } })
+$content = @(@{ type = 'image_url'; image_url = @{ url = $dataUrl } })
 if ($Prompt) { $content += @{ type = 'text'; text = $Prompt } }
 $body = @{ model = $resolvedModel; messages = @(@{ role = 'user'; content = $content }) } | ConvertTo-Json -Depth 12
 
@@ -185,6 +236,8 @@ try {
                 channel    = $Channel
                 model      = $resolvedModel
                 image_sha  = $imgHash.Substring(0, 12)
+                image_mb   = $sizeMB
+                prepared_payload = [bool]$preparedImage
                 latency_ms = $sw.ElapsedMilliseconds
                 cached     = $false
             }

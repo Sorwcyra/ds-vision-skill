@@ -1,7 +1,7 @@
 ---
 name: ds-vision-skill
 metadata:
-  version: 0.4.1
+  version: 0.4.2
   repository: https://github.com/Sorwcyra/ds-vision-skill
 description: >
   为纯文本推理模型补充视觉能力。用户提供图片、截图、照片、图表、UI 截图、代码截图、数学题图片、

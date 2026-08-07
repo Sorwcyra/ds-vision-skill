@@ -59,38 +59,216 @@ function Quote-PowerShellSingle([string]$Value) {
     return "'" + ($Value -replace "'", "''") + "'"
 }
 
-function Run-Race([string]$ScriptPath, [array]$ChannelNames, [string]$InputPath, [string]$UserPrompt, [bool]$DisableCache) {
-    $workers = @()
-    foreach ($name in $ChannelNames) {
-        $quotedScript = Quote-PowerShellSingle $ScriptPath
-        $quotedPath = Quote-PowerShellSingle $InputPath
-        $quotedPrompt = Quote-PowerShellSingle $UserPrompt
-        $quotedChannel = Quote-PowerShellSingle $name
-        $cacheSwitch = if ($DisableCache) { ' -NoCache' } else { '' }
-        $cmd = @"
-`$ErrorActionPreference = 'Continue'
-`$ProgressPreference = 'SilentlyContinue'
-& $quotedScript -ImagePath $quotedPath -Prompt $quotedPrompt -Json$cacheSwitch -Channel $quotedChannel
-exit `$LASTEXITCODE
-"@
-        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = 'powershell.exe'
-        $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded"
-        $psi.UseShellExecute = $false
-        $psi.CreateNoWindow = $true
-        $psi.RedirectStandardOutput = $true
-        $psi.RedirectStandardError = $true
-        $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
-        $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
-        $proc = New-Object System.Diagnostics.Process
-        $proc.StartInfo = $psi
-        if (-not $proc.Start()) {
-            throw "Failed to start channel worker: $name"
+function Get-ImageMime([string]$InputPath) {
+    switch ([IO.Path]::GetExtension($InputPath).ToLower()) {
+        '.jpg'  { return 'image/jpeg' }
+        '.jpeg' { return 'image/jpeg' }
+        '.png'  { return 'image/png' }
+        '.webp' { return 'image/webp' }
+        '.gif'  { return 'image/gif' }
+        '.bmp'  { return 'image/bmp' }
+        default { return 'image/png' }
+    }
+}
+
+function New-PreparedImagePayload([string]$InputPath) {
+    $file = Get-Item -LiteralPath $InputPath
+    $sizeMB = [Math]::Round($file.Length / 1MB, 2)
+    if ($sizeMB -gt 15) {
+        throw "image too large (${sizeMB} MB). Downscale it first or use MinerU for documents."
+    }
+    $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $InputPath).Hash
+    $mime = Get-ImageMime $InputPath
+    return [pscustomobject]@{
+        data_url = ''
+        hash = $hash
+        mime = $mime
+        size_mb = $sizeMB
+    }
+}
+
+function Add-PreparedImageDataUrl([object]$PreparedImagePayload, [string]$InputPath) {
+    if (-not $PreparedImagePayload.data_url) {
+        $bytes = [IO.File]::ReadAllBytes($InputPath)
+        $PreparedImagePayload.data_url = "data:$($PreparedImagePayload.mime);base64,$([Convert]::ToBase64String($bytes))"
+    }
+    return $PreparedImagePayload
+}
+
+function Get-ChatUrl([string]$Url) {
+    $Url = $Url.TrimEnd('/')
+    if ($Url -notmatch '/chat/completions$') { $Url += '/chat/completions' }
+    return $Url
+}
+
+function Get-RaceChannelConfig([string]$Name) {
+    if ($Name -eq 'glm') {
+        return [pscustomobject]@{
+            name = $Name
+            url = Get-ChatUrl 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
+            model = 'glm-4v-flash'
+            key = Get-EnvValue 'GLM_API_KEY'
         }
+    }
+    if ($Name -eq 'glm-thinking') {
+        return [pscustomobject]@{
+            name = $Name
+            url = Get-ChatUrl 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
+            model = 'glm-4.1v-thinking-flash'
+            key = Get-EnvValue 'GLM_API_KEY'
+        }
+    }
+    if ($Name -eq 'agnes-2.5-flash') {
+        $base = Get-EnvValue 'AGNES_BASE_URL'
+        if (-not $base) { $base = 'https://api.agnes-ai.cn/v1/chat/completions' }
+        return [pscustomobject]@{
+            name = $Name
+            url = Get-ChatUrl $base
+            model = 'agnes-2.5-flash'
+            key = Get-EnvValue 'AGNES_API_KEY'
+        }
+    }
+    if ($Name -eq 'agnes-2.0-flash') {
+        $base = Get-EnvValue 'AGNES_BASE_URL'
+        if (-not $base) { $base = 'https://api.agnes-ai.cn/v1/chat/completions' }
+        return [pscustomobject]@{
+            name = $Name
+            url = Get-ChatUrl $base
+            model = 'agnes-2.0-flash'
+            key = Get-EnvValue 'AGNES_API_KEY'
+        }
+    }
+    return $null
+}
+
+function Get-VlmCacheFile([string]$ImageHash, [string]$UserPrompt, [string]$ChannelName, [string]$Model) {
+    $cacheDir = Join-Path $env:USERPROFILE '.ds-vision\cache'
+    $shaObj = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $cacheInput = [Text.Encoding]::UTF8.GetBytes(($ImageHash + '|' + $UserPrompt + '|' + $ChannelName + '|' + $Model))
+        $cacheKey = ([BitConverter]::ToString($shaObj.ComputeHash($cacheInput))).Replace('-', '').ToLower()
+    } finally {
+        $shaObj.Dispose()
+    }
+    return Join-Path $cacheDir ($cacheKey + '.json')
+}
+
+function Run-RacePrepared([array]$ChannelNames, [object]$PreparedImagePayload, [string]$InputPath, [string]$UserPrompt, [bool]$DisableCache) {
+    $scriptBlock = {
+        param(
+            [string]$ChannelName,
+            [string]$ChatUrl,
+            [string]$Model,
+            [string]$ApiKey,
+            [string]$DataUrl,
+            [string]$Prompt,
+            [string]$ImageHash,
+            [double]$ImageSizeMB,
+            [string]$CacheFile
+        )
+
+        $ProgressPreference = 'SilentlyContinue'
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+        $content = @(@{ type = 'image_url'; image_url = @{ url = $DataUrl } })
+        if ($Prompt) { $content += @{ type = 'text'; text = $Prompt } }
+        $body = @{ model = $Model; messages = @(@{ role = 'user'; content = $content }) } | ConvertTo-Json -Depth 12
+
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        try {
+            $headers = if ($ApiKey) { @{ Authorization = "Bearer $ApiKey" } } else { @{} }
+            $resp = Invoke-WebRequest -Uri $ChatUrl -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $body -TimeoutSec 90 -UseBasicParsing
+            if ($resp.RawContentStream) {
+                if ($resp.RawContentStream.CanSeek) { $resp.RawContentStream.Position = 0 }
+                $reader = New-Object System.IO.StreamReader($resp.RawContentStream, [System.Text.Encoding]::UTF8)
+                $responseText = $reader.ReadToEnd()
+            } else {
+                $responseText = [string]$resp.Content
+            }
+            $r = $responseText | ConvertFrom-Json
+            $sw.Stop()
+            if ($r.choices -and $r.choices[0].message.content) {
+                $envelope = [ordered]@{
+                    task_type  = 'image_reasoning'
+                    tool_used  = "$ChannelName`:$Model"
+                    confidence = 'high'
+                    result     = $r.choices[0].message.content
+                    metadata   = [ordered]@{
+                        channel    = $ChannelName
+                        model      = $Model
+                        image_sha  = $ImageHash.Substring(0, 12)
+                        image_mb   = $ImageSizeMB
+                        prepared_payload = $true
+                        race_runtime = 'runspace'
+                        latency_ms = $sw.ElapsedMilliseconds
+                        cached     = $false
+                    }
+                }
+                if ($CacheFile) {
+                    $cacheDir = Split-Path -Parent $CacheFile
+                    if (-not (Test-Path -LiteralPath $cacheDir)) { New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null }
+                    $envelope | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $CacheFile -Encoding UTF8
+                }
+                return [pscustomobject]@{
+                    name = $ChannelName
+                    code = 0
+                    text = ($envelope | ConvertTo-Json -Depth 6)
+                }
+            }
+            return [pscustomobject]@{ name = $ChannelName; code = 1; text = 'ERROR: empty response content.' }
+        } catch {
+            $status = 0
+            if ($_.Exception.Response) { try { $status = [int]$_.Exception.Response.StatusCode } catch { } }
+            if ($status -eq 401 -or $status -eq 403) {
+                return [pscustomobject]@{ name = $ChannelName; code = 2; text = "ERROR: channel=$ChannelName status=$status auth failed." }
+            }
+            if ($status -eq 429) {
+                return [pscustomobject]@{ name = $ChannelName; code = 3; text = "ERROR: channel=$ChannelName status=429 rate limited." }
+            }
+            if ($status -eq 0 -or $status -ge 500) {
+                return [pscustomobject]@{ name = $ChannelName; code = 4; text = "ERROR: channel=$ChannelName status=$status network/server: $($_.Exception.Message)" }
+            }
+            return [pscustomobject]@{ name = $ChannelName; code = 5; text = "ERROR: channel=$ChannelName status=$status request rejected: $($_.Exception.Message)" }
+        }
+    }
+
+    $configs = @()
+    foreach ($name in $ChannelNames) {
+        $config = Get-RaceChannelConfig $name
+        if (-not $config -or -not $config.key) { continue }
+        $cacheFile = Get-VlmCacheFile $PreparedImagePayload.hash $UserPrompt $config.name $config.model
+        $config | Add-Member -NotePropertyName cache_file -NotePropertyValue $cacheFile -Force
+        if (-not $DisableCache -and (Test-Path -LiteralPath $cacheFile)) {
+            try {
+                $cached = Get-Content -Raw -LiteralPath $cacheFile | ConvertFrom-Json
+                if ($cached.result) {
+                    $cached.metadata | Add-Member -NotePropertyName cached -NotePropertyValue $true -Force
+                    $cached.metadata | Add-Member -NotePropertyName race_runtime -NotePropertyValue 'runspace-cache' -Force
+                    return [pscustomobject]@{
+                        success = $true
+                        winner  = [pscustomobject]@{
+                            name = $config.name
+                            code = 0
+                            text = ($cached | ConvertTo-Json -Depth 6)
+                        }
+                        attempts = @([pscustomobject]@{ name = $config.name; code = 0; text = 'cache hit' })
+                    }
+                }
+            } catch { }
+        }
+        $configs += $config
+    }
+
+    $PreparedImagePayload = Add-PreparedImageDataUrl $PreparedImagePayload $InputPath
+
+    $workers = @()
+    foreach ($config in $configs) {
+        $ps = [powershell]::Create()
+        [void]$ps.AddScript($scriptBlock).AddArgument($config.name).AddArgument($config.url).AddArgument($config.model).AddArgument($config.key).AddArgument($PreparedImagePayload.data_url).AddArgument($UserPrompt).AddArgument($PreparedImagePayload.hash).AddArgument($PreparedImagePayload.size_mb).AddArgument($config.cache_file)
         $workers += [pscustomobject]@{
-            name = $name
-            process = $proc
+            name = $config.name
+            shell = $ps
+            handle = $ps.BeginInvoke()
         }
     }
 
@@ -98,37 +276,18 @@ exit `$LASTEXITCODE
     $results = @()
     try {
         while ($pending.Count -gt 0) {
-            $finished = @($pending | Where-Object { $_.process.HasExited })
+            $finished = @($pending | Where-Object { $_.handle.IsCompleted })
             if ($finished.Count -eq 0) {
-                Start-Sleep -Milliseconds 100
+                Start-Sleep -Milliseconds 50
                 continue
             }
             foreach ($worker in @($finished)) {
-                $worker.process.WaitForExit()
-                $stdout = $worker.process.StandardOutput.ReadToEnd()
-                $stderr = $worker.process.StandardError.ReadToEnd()
-                $code = $worker.process.ExitCode
-                $stdoutText = $stdout.Trim()
-                $jsonSuccess = $false
-                if ($stdoutText) {
-                    try {
-                        $parsed = $stdoutText | ConvertFrom-Json
-                        $jsonSuccess = [bool]$parsed.result
-                    } catch { }
-                }
-                if ($jsonSuccess -and $null -eq $code) { $code = 0 }
-                $text = if ($jsonSuccess -or $code -eq 0) { $stdoutText } else { (($stdout + "`n" + $stderr).Trim()) }
-                $result = [pscustomobject]@{
-                    name = $worker.name
-                    code = $code
-                    text = $text
-                }
+                $output = $worker.shell.EndInvoke($worker.handle)
+                $result = if ($output.Count -gt 0) { $output[0] } else { [pscustomobject]@{ name = $worker.name; code = 1; text = 'ERROR: channel returned no output.' } }
                 $results += $result
-                if ($jsonSuccess -or $result.code -eq 0) {
-                    foreach ($other in @($pending | Where-Object { $_.process.Id -ne $worker.process.Id })) {
-                        if (-not $other.process.HasExited) {
-                            Stop-Process -Id $other.process.Id -Force -ErrorAction SilentlyContinue
-                        }
+                if ($result.code -eq 0) {
+                    foreach ($other in @($pending | Where-Object { $_.name -ne $worker.name })) {
+                        try { $other.shell.Stop() } catch { }
                     }
                     return [pscustomobject]@{
                         success = $true
@@ -136,15 +295,12 @@ exit `$LASTEXITCODE
                         attempts = $results
                     }
                 }
-                $pending = @($pending | Where-Object { $_.process.Id -ne $worker.process.Id })
+                $pending = @($pending | Where-Object { $_.name -ne $worker.name })
             }
         }
     } finally {
         foreach ($worker in $workers) {
-            if ($worker.process -and -not $worker.process.HasExited) {
-                Stop-Process -Id $worker.process.Id -Force -ErrorAction SilentlyContinue
-            }
-            if ($worker.process) { $worker.process.Dispose() }
+            if ($worker.shell) { $worker.shell.Dispose() }
         }
     }
 
@@ -276,9 +432,19 @@ if ($Intent -eq 'reason') {
     }
 
     if ($raceChannels.Count -gt 0) {
-        $race = Run-Race $vlm $raceChannels $Path $Prompt ([bool]$NoCache)
-        $attempts += @($race.attempts)
-        if ($race.success) { Emit-RaceWinner $race $raceChannels; exit 0 }
+        $preparedPayload = $null
+        try {
+            $preparedPayload = New-PreparedImagePayload $Path
+            $race = Run-RacePrepared $raceChannels $preparedPayload $Path $Prompt ([bool]$NoCache)
+            $attempts += @($race.attempts)
+            if ($race.success) { Emit-RaceWinner $race $raceChannels; exit 0 }
+        } catch {
+            $attempts += [pscustomobject]@{
+                name = 'prepare-image-payload'
+                code = 1
+                text = "ERROR: $($_.Exception.Message)"
+            }
+        }
     }
 
     $channels = @()

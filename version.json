@@ -1,11 +1,11 @@
 {
   "name": "ds-vision-skill",
-  "version": "0.4.1",
-  "updated": "2026-08-05",
+  "version": "0.4.2",
+  "updated": "2026-08-07",
   "repository": "https://github.com/Sorwcyra/ds-vision-skill",
   "release_notes": [
-    "Changed auto image routing to prefer the free vision race pool by default.",
-    "Started Agnes race channels before GLM while keeping first-success concurrency.",
-    "Kept OCR available through explicit -Intent ocr or -AccurateOcr."
+    "Switched race-channel fanout from child PowerShell processes to in-process runspaces.",
+    "Prepared image data once per race and shared it across channel workers.",
+    "Preserved result-cache behavior while avoiding base64 generation on cache hits."
   ]
 }
