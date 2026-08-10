@@ -9,7 +9,11 @@ param(
     [switch]$Complex,
     [switch]$AccurateOcr,
     [switch]$Json,
-    [switch]$NoCache
+    [switch]$NoCache,
+    [ValidateRange(1, 8192)]
+    [int]$MaxTokens = 1024,
+    [ValidateRange(1, 300)]
+    [int]$TimeoutSec = 90
 )
 
 $ErrorActionPreference = 'Stop'
@@ -72,25 +76,33 @@ function Get-ImageMime([string]$InputPath) {
 }
 
 function New-PreparedImagePayload([string]$InputPath) {
-    $file = Get-Item -LiteralPath $InputPath
-    $sizeMB = [Math]::Round($file.Length / 1MB, 2)
+    # Read once so cache hashing and base64 encoding do not traverse the file twice.
+    $bytes = [IO.File]::ReadAllBytes($InputPath)
+    $sizeMB = [Math]::Round($bytes.Length / 1MB, 2)
     if ($sizeMB -gt 15) {
         throw "image too large (${sizeMB} MB). Downscale it first or use MinerU for documents."
     }
-    $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $InputPath).Hash
+    $shaObj = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = ([BitConverter]::ToString($shaObj.ComputeHash($bytes))).Replace('-', '')
+    } finally {
+        $shaObj.Dispose()
+    }
     $mime = Get-ImageMime $InputPath
     return [pscustomobject]@{
         data_url = ''
         hash = $hash
         mime = $mime
         size_mb = $sizeMB
+        bytes = $bytes
     }
 }
 
 function Add-PreparedImageDataUrl([object]$PreparedImagePayload, [string]$InputPath) {
     if (-not $PreparedImagePayload.data_url) {
-        $bytes = [IO.File]::ReadAllBytes($InputPath)
+        $bytes = if ($PreparedImagePayload.bytes) { $PreparedImagePayload.bytes } else { [IO.File]::ReadAllBytes($InputPath) }
         $PreparedImagePayload.data_url = "data:$($PreparedImagePayload.mime);base64,$([Convert]::ToBase64String($bytes))"
+        $PreparedImagePayload.bytes = $null
     }
     return $PreparedImagePayload
 }
@@ -103,17 +115,21 @@ function Get-ChatUrl([string]$Url) {
 
 function Get-RaceChannelConfig([string]$Name) {
     if ($Name -eq 'glm') {
+        $base = Get-EnvValue 'GLM_BASE_URL'
+        if (-not $base) { $base = 'https://open.bigmodel.cn/api/paas/v4/chat/completions' }
         return [pscustomobject]@{
             name = $Name
-            url = Get-ChatUrl 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
+            url = Get-ChatUrl $base
             model = 'glm-4v-flash'
             key = Get-EnvValue 'GLM_API_KEY'
         }
     }
     if ($Name -eq 'glm-thinking') {
+        $base = Get-EnvValue 'GLM_BASE_URL'
+        if (-not $base) { $base = 'https://open.bigmodel.cn/api/paas/v4/chat/completions' }
         return [pscustomobject]@{
             name = $Name
-            url = Get-ChatUrl 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
+            url = Get-ChatUrl $base
             model = 'glm-4.1v-thinking-flash'
             key = Get-EnvValue 'GLM_API_KEY'
         }
@@ -141,11 +157,11 @@ function Get-RaceChannelConfig([string]$Name) {
     return $null
 }
 
-function Get-VlmCacheFile([string]$ImageHash, [string]$UserPrompt, [string]$ChannelName, [string]$Model) {
+function Get-VlmCacheFile([string]$ImageHash, [string]$UserPrompt, [string]$ChannelName, [string]$Model, [string]$Endpoint, [int]$OutputTokens) {
     $cacheDir = Join-Path $env:USERPROFILE '.ds-vision\cache'
     $shaObj = [System.Security.Cryptography.SHA256]::Create()
     try {
-        $cacheInput = [Text.Encoding]::UTF8.GetBytes(($ImageHash + '|' + $UserPrompt + '|' + $ChannelName + '|' + $Model))
+        $cacheInput = [Text.Encoding]::UTF8.GetBytes(('v2|' + $ImageHash + '|' + $UserPrompt + '|' + $ChannelName + '|' + $Model + '|' + $Endpoint + '|' + $OutputTokens))
         $cacheKey = ([BitConverter]::ToString($shaObj.ComputeHash($cacheInput))).Replace('-', '').ToLower()
     } finally {
         $shaObj.Dispose()
@@ -153,103 +169,76 @@ function Get-VlmCacheFile([string]$ImageHash, [string]$UserPrompt, [string]$Chan
     return Join-Path $cacheDir ($cacheKey + '.json')
 }
 
-function Run-RacePrepared([array]$ChannelNames, [object]$PreparedImagePayload, [string]$InputPath, [string]$UserPrompt, [bool]$DisableCache) {
-    $scriptBlock = {
-        param(
-            [string]$ChannelName,
-            [string]$ChatUrl,
-            [string]$Model,
-            [string]$ApiKey,
-            [string]$DataUrl,
-            [string]$Prompt,
-            [string]$ImageHash,
-            [double]$ImageSizeMB,
-            [string]$CacheFile
-        )
-
-        $ProgressPreference = 'SilentlyContinue'
-        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-
-        $content = @(@{ type = 'image_url'; image_url = @{ url = $DataUrl } })
-        if ($Prompt) { $content += @{ type = 'text'; text = $Prompt } }
-        $body = @{ model = $Model; messages = @(@{ role = 'user'; content = $content }) } | ConvertTo-Json -Depth 12
-
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        try {
-            $headers = if ($ApiKey) { @{ Authorization = "Bearer $ApiKey" } } else { @{} }
-            $resp = Invoke-WebRequest -Uri $ChatUrl -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $body -TimeoutSec 90 -UseBasicParsing
-            if ($resp.RawContentStream) {
-                if ($resp.RawContentStream.CanSeek) { $resp.RawContentStream.Position = 0 }
-                $reader = New-Object System.IO.StreamReader($resp.RawContentStream, [System.Text.Encoding]::UTF8)
-                $responseText = $reader.ReadToEnd()
-            } else {
-                $responseText = [string]$resp.Content
-            }
-            $r = $responseText | ConvertFrom-Json
-            $sw.Stop()
-            if ($r.choices -and $r.choices[0].message.content) {
-                $envelope = [ordered]@{
-                    task_type  = 'image_reasoning'
-                    tool_used  = "$ChannelName`:$Model"
-                    confidence = 'high'
-                    result     = $r.choices[0].message.content
-                    metadata   = [ordered]@{
-                        channel    = $ChannelName
-                        model      = $Model
-                        image_sha  = $ImageHash.Substring(0, 12)
-                        image_mb   = $ImageSizeMB
-                        prepared_payload = $true
-                        race_runtime = 'runspace'
-                        latency_ms = $sw.ElapsedMilliseconds
-                        cached     = $false
-                    }
-                }
-                if ($CacheFile) {
-                    $cacheDir = Split-Path -Parent $CacheFile
-                    if (-not (Test-Path -LiteralPath $cacheDir)) { New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null }
-                    $envelope | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $CacheFile -Encoding UTF8
-                }
-                return [pscustomobject]@{
-                    name = $ChannelName
-                    code = 0
-                    text = ($envelope | ConvertTo-Json -Depth 6)
-                }
-            }
-            return [pscustomobject]@{ name = $ChannelName; code = 1; text = 'ERROR: empty response content.' }
-        } catch {
-            $status = 0
-            if ($_.Exception.Response) { try { $status = [int]$_.Exception.Response.StatusCode } catch { } }
-            if ($status -eq 401 -or $status -eq 403) {
-                return [pscustomobject]@{ name = $ChannelName; code = 2; text = "ERROR: channel=$ChannelName status=$status auth failed." }
-            }
-            if ($status -eq 429) {
-                return [pscustomobject]@{ name = $ChannelName; code = 3; text = "ERROR: channel=$ChannelName status=429 rate limited." }
-            }
-            if ($status -eq 0 -or $status -ge 500) {
-                return [pscustomobject]@{ name = $ChannelName; code = 4; text = "ERROR: channel=$ChannelName status=$status network/server: $($_.Exception.Message)" }
-            }
-            return [pscustomobject]@{ name = $ChannelName; code = 5; text = "ERROR: channel=$ChannelName status=$status request rejected: $($_.Exception.Message)" }
-        }
+function Write-RaceCache([string]$CacheFile, [object]$Envelope) {
+    if (-not $CacheFile) { return }
+    $cacheDir = Split-Path -Parent $CacheFile
+    if (-not (Test-Path -LiteralPath $cacheDir)) {
+        New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
     }
+    $jsonText = $Envelope | ConvertTo-Json -Depth 6 -Compress
+    [IO.File]::WriteAllText($CacheFile, $jsonText, (New-Object Text.UTF8Encoding($false)))
+}
 
+function New-RaceRequestBody([string]$Model, [string]$DataUrlJson, [string]$PromptJson, [int]$OutputTokens) {
+    $body = '{"model":' + ($Model | ConvertTo-Json -Compress) + ',"messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":' + $DataUrlJson + '}}'
+    if ($PromptJson) { $body += ',{"type":"text","text":' + $PromptJson + '}' }
+    $body += ']}]'
+    if ($OutputTokens -gt 0) { $body += ',"max_tokens":' + $OutputTokens }
+    $body += '}'
+    return $body
+}
+
+function Get-HttpFailure([string]$ChannelName, [int]$Status, [string]$Message) {
+    if ($Status -eq 401 -or $Status -eq 403) {
+        return [pscustomobject]@{ name = $ChannelName; code = 2; text = "ERROR: channel=$ChannelName status=$Status auth failed." }
+    }
+    if ($Status -eq 429) {
+        return [pscustomobject]@{ name = $ChannelName; code = 3; text = "ERROR: channel=$ChannelName status=429 rate limited." }
+    }
+    if ($Status -eq 0 -or $Status -ge 500) {
+        return [pscustomobject]@{ name = $ChannelName; code = 4; text = "ERROR: channel=$ChannelName status=$Status network/server: $Message" }
+    }
+    return [pscustomobject]@{ name = $ChannelName; code = 5; text = "ERROR: channel=$ChannelName status=$Status request rejected: $Message" }
+}
+
+function Read-HttpResponseText([object]$Response) {
+    $bytes = $Response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
+    $encoding = [Text.Encoding]::UTF8
+    $charset = $Response.Content.Headers.ContentType.CharSet
+    if ($charset) {
+        try { $encoding = [Text.Encoding]::GetEncoding($charset.Trim('"')) } catch { }
+    }
+    $stream = New-Object IO.MemoryStream(,$bytes)
+    $reader = New-Object IO.StreamReader($stream, $encoding, $true)
+    try {
+        return $reader.ReadToEnd()
+    } finally {
+        $reader.Dispose()
+        $stream.Dispose()
+    }
+}
+
+function Run-RacePrepared([array]$ChannelNames, [object]$PreparedImagePayload, [string]$InputPath, [string]$UserPrompt, [bool]$DisableCache, [int]$OutputTokens, [int]$RequestTimeoutSec) {
     $configs = @()
     foreach ($name in $ChannelNames) {
         $config = Get-RaceChannelConfig $name
         if (-not $config -or -not $config.key) { continue }
-        $cacheFile = Get-VlmCacheFile $PreparedImagePayload.hash $UserPrompt $config.name $config.model
+        $cacheFile = Get-VlmCacheFile $PreparedImagePayload.hash $UserPrompt $config.name $config.model $config.url $OutputTokens
         $config | Add-Member -NotePropertyName cache_file -NotePropertyValue $cacheFile -Force
         if (-not $DisableCache -and (Test-Path -LiteralPath $cacheFile)) {
             try {
                 $cached = Get-Content -Raw -LiteralPath $cacheFile | ConvertFrom-Json
                 if ($cached.result) {
                     $cached.metadata | Add-Member -NotePropertyName cached -NotePropertyValue $true -Force
-                    $cached.metadata | Add-Member -NotePropertyName race_runtime -NotePropertyValue 'runspace-cache' -Force
+                    $cached.metadata | Add-Member -NotePropertyName race_runtime -NotePropertyValue 'cache' -Force
                     return [pscustomobject]@{
                         success = $true
+                        started_channels = @()
                         winner  = [pscustomobject]@{
                             name = $config.name
                             code = 0
-                            text = ($cached | ConvertTo-Json -Depth 6)
+                            text = ($cached | ConvertTo-Json -Depth 6 -Compress)
+                            payload = $cached
                         }
                         attempts = @([pscustomobject]@{ name = $config.name; code = 0; text = 'cache hit' })
                     }
@@ -259,66 +248,195 @@ function Run-RacePrepared([array]$ChannelNames, [object]$PreparedImagePayload, [
         $configs += $config
     }
 
-    $PreparedImagePayload = Add-PreparedImageDataUrl $PreparedImagePayload $InputPath
-
-    $workers = @()
-    foreach ($config in $configs) {
-        $ps = [powershell]::Create()
-        [void]$ps.AddScript($scriptBlock).AddArgument($config.name).AddArgument($config.url).AddArgument($config.model).AddArgument($config.key).AddArgument($PreparedImagePayload.data_url).AddArgument($UserPrompt).AddArgument($PreparedImagePayload.hash).AddArgument($PreparedImagePayload.size_mb).AddArgument($config.cache_file)
-        $workers += [pscustomobject]@{
-            name = $config.name
-            shell = $ps
-            handle = $ps.BeginInvoke()
-        }
+    if ($configs.Count -eq 0) {
+        return [pscustomobject]@{ success = $false; started_channels = @(); winner = $null; attempts = @() }
     }
 
-    $pending = @($workers)
+    $PreparedImagePayload = Add-PreparedImageDataUrl $PreparedImagePayload $InputPath
+    $dataUrlJson = $PreparedImagePayload.data_url | ConvertTo-Json -Compress
+    $promptJson = if ($UserPrompt) { $UserPrompt | ConvertTo-Json -Compress } else { '' }
+
+    Add-Type -AssemblyName System.Net.Http
+    if ([Net.ServicePointManager]::DefaultConnectionLimit -lt 16) {
+        [Net.ServicePointManager]::DefaultConnectionLimit = 16
+    }
+    $handler = New-Object Net.Http.HttpClientHandler
+    $handler.AutomaticDecompression = [Net.DecompressionMethods]::GZip -bor [Net.DecompressionMethods]::Deflate
+    if ($handler.PSObject.Properties.Name -contains 'MaxConnectionsPerServer') {
+        $handler.MaxConnectionsPerServer = 8
+    }
+    $client = New-Object Net.Http.HttpClient($handler)
+    $client.Timeout = [Threading.Timeout]::InfiniteTimeSpan
+    $workers = @()
     $results = @()
+    $raceCts = $null
     try {
-        while ($pending.Count -gt 0) {
-            $finished = @($pending | Where-Object { $_.handle.IsCompleted })
-            if ($finished.Count -eq 0) {
-                Start-Sleep -Milliseconds 50
-                continue
+        foreach ($config in $configs) {
+            $request = $null
+            try {
+                $body = New-RaceRequestBody $config.model $dataUrlJson $promptJson $OutputTokens
+                $request = New-Object Net.Http.HttpRequestMessage([Net.Http.HttpMethod]::Post, $config.url)
+                if (-not $request.Headers.TryAddWithoutValidation('Authorization', "Bearer $($config.key)")) {
+                    throw 'authorization header was rejected.'
+                }
+                $request.Headers.ExpectContinue = $false
+                $request.Content = New-Object Net.Http.StringContent($body, [Text.Encoding]::UTF8, 'application/json')
+                $workers += [pscustomobject]@{
+                    name = $config.name
+                    config = $config
+                    request = $request
+                    stopwatch = New-Object Diagnostics.Stopwatch
+                    task = $null
+                }
+            } catch {
+                if ($request) { $request.Dispose() }
+                $results += Get-HttpFailure $config.name 0 "request setup: $($_.Exception.Message)"
             }
-            foreach ($worker in @($finished)) {
-                $output = $worker.shell.EndInvoke($worker.handle)
-                $result = if ($output.Count -gt 0) { $output[0] } else { [pscustomobject]@{ name = $worker.name; code = 1; text = 'ERROR: channel returned no output.' } }
-                $results += $result
-                if ($result.code -eq 0) {
-                    foreach ($other in @($pending | Where-Object { $_.name -ne $worker.name })) {
-                        try { $other.shell.Stop() } catch { }
+        }
+
+        if ($workers.Count -eq 0) {
+            return [pscustomobject]@{ success = $false; started_channels = @(); winner = $null; attempts = $results }
+        }
+
+        # Build every request first, then start all four in one tight loop.
+        $raceCts = New-Object Threading.CancellationTokenSource
+        $raceCts.CancelAfter($RequestTimeoutSec * 1000)
+        $startedWorkers = @()
+        foreach ($worker in $workers) {
+            try {
+                $worker.stopwatch.Start()
+                $worker.task = $client.SendAsync($worker.request, [Net.Http.HttpCompletionOption]::ResponseContentRead, $raceCts.Token)
+                $startedWorkers += $worker
+            } catch {
+                $worker.stopwatch.Stop()
+                $results += Get-HttpFailure $worker.name 0 "request start: $($_.Exception.Message)"
+            }
+        }
+
+        if ($startedWorkers.Count -eq 0) {
+            return [pscustomobject]@{ success = $false; started_channels = @(); winner = $null; attempts = $results }
+        }
+
+        $pending = @($startedWorkers)
+        $raceClock = [Diagnostics.Stopwatch]::StartNew()
+        while ($pending.Count -gt 0) {
+            [Threading.Tasks.Task[]]$taskArray = @($pending | ForEach-Object { $_.task })
+            $remainingMs = [Math]::Max(1, ($RequestTimeoutSec * 1000) - [int]$raceClock.ElapsedMilliseconds)
+            $finishedIndex = [Threading.Tasks.Task]::WaitAny($taskArray, $remainingMs)
+            if ($finishedIndex -lt 0) {
+                try { $raceCts.Cancel() } catch { }
+                foreach ($timedOut in $pending) {
+                    $results += Get-HttpFailure $timedOut.name 0 'race timeout.'
+                }
+                break
+            }
+            $worker = $pending[$finishedIndex]
+            $worker.stopwatch.Stop()
+            $response = $null
+            $result = $null
+            try {
+                $response = $worker.task.GetAwaiter().GetResult()
+                $status = [int]$response.StatusCode
+                if (-not $response.IsSuccessStatusCode) {
+                    $result = Get-HttpFailure $worker.name $status $response.ReasonPhrase
+                } else {
+                    $responseText = Read-HttpResponseText $response
+                    $parsed = $null
+                    try {
+                        $parsed = $responseText | ConvertFrom-Json
+                    } catch {
+                        $result = [pscustomobject]@{ name = $worker.name; code = 1; text = 'ERROR: invalid JSON response.' }
                     }
-                    return [pscustomobject]@{
-                        success = $true
-                        winner  = $result
-                        attempts = $results
+                    $content = if ($parsed -and $parsed.choices -and $parsed.choices[0].message.content) { $parsed.choices[0].message.content } else { $null }
+                    if (-not $result -and $content) {
+                        $envelope = [ordered]@{
+                            task_type  = 'image_reasoning'
+                            tool_used  = "$($worker.name):$($worker.config.model)"
+                            confidence = 'high'
+                            result     = $content
+                            metadata   = [ordered]@{
+                                channel    = $worker.name
+                                model      = $worker.config.model
+                                image_sha  = $PreparedImagePayload.hash.Substring(0, 12)
+                                image_mb   = $PreparedImagePayload.size_mb
+                                prepared_payload = $true
+                                race_runtime = 'httpclient-task'
+                                latency_ms = $worker.stopwatch.ElapsedMilliseconds
+                                max_tokens = $OutputTokens
+                                cached     = $false
+                            }
+                        }
+                        # Stop loser traffic as soon as the response is known to be valid.
+                        try { $raceCts.Cancel() } catch { }
+                        if (-not $DisableCache) {
+                            try { Write-RaceCache $worker.config.cache_file $envelope } catch { }
+                        }
+                        $result = [pscustomobject]@{
+                            name = $worker.name
+                            code = 0
+                            text = 'ok'
+                            payload = [pscustomobject]$envelope
+                        }
+                    } elseif (-not $result) {
+                        $result = [pscustomobject]@{ name = $worker.name; code = 1; text = 'ERROR: empty response content.' }
                     }
                 }
-                $pending = @($pending | Where-Object { $_.name -ne $worker.name })
+            } catch {
+                $message = $_.Exception.Message
+                if ($_.Exception.InnerException) { $message = $_.Exception.InnerException.Message }
+                $result = Get-HttpFailure $worker.name 0 $message
+            } finally {
+                if ($response) { $response.Dispose() }
             }
+
+            $results += $result
+            if ($result.code -eq 0) {
+                try { $raceCts.Cancel() } catch { }
+                return [pscustomobject]@{
+                    success = $true
+                    started_channels = @($startedWorkers | ForEach-Object { $_.name })
+                    winner  = $result
+                    attempts = $results
+                }
+            }
+            $pending = @($pending | Where-Object { $_.name -ne $worker.name })
+        }
+
+        return [pscustomobject]@{
+            success = $false
+            started_channels = @($startedWorkers | ForEach-Object { $_.name })
+            winner  = $null
+            attempts = $results
         }
     } finally {
+        if ($raceCts) { try { $raceCts.Cancel() } catch { } }
+        if ($client) { $client.Dispose() }
         foreach ($worker in $workers) {
-            if ($worker.shell) { $worker.shell.Dispose() }
+            if ($worker.task -and $worker.task.Status -eq [Threading.Tasks.TaskStatus]::RanToCompletion) {
+                try {
+                    $completedResponse = $worker.task.GetAwaiter().GetResult()
+                    if ($completedResponse) { $completedResponse.Dispose() }
+                } catch { }
+            }
+            if ($worker.request) { $worker.request.Dispose() }
         }
-    }
-
-    return [pscustomobject]@{
-        success = $false
-        winner  = $null
-        attempts = $results
+        if ($raceCts) { $raceCts.Dispose() }
+        if ($handler) { $handler.Dispose() }
     }
 }
 
 function Emit-RaceWinner([object]$Race, [array]$StartedChannels) {
     if (-not $Json) {
-        Write-Output $Race.winner.text
+        if ($Race.winner.payload -and $null -ne $Race.winner.payload.result) {
+            Write-Output $Race.winner.payload.result
+        } else {
+            Write-Output $Race.winner.text
+        }
         return
     }
 
     try {
-        $payload = $Race.winner.text | ConvertFrom-Json
+        $payload = if ($Race.winner.payload) { $Race.winner.payload } else { $Race.winner.text | ConvertFrom-Json }
         if (-not $payload.metadata) {
             $payload | Add-Member -NotePropertyName metadata -NotePropertyValue ([pscustomobject]@{}) -Force
         }
@@ -328,8 +446,12 @@ function Emit-RaceWinner([object]$Race, [array]$StartedChannels) {
             started_channels   = @($StartedChannels)
             completed_attempts = @($Race.attempts | ForEach-Object { [ordered]@{ name = $_.name; code = $_.code } })
         }
-        $payload.metadata | Add-Member -NotePropertyName race -NotePropertyValue $raceMeta -Force
-        Write-Output ($payload | ConvertTo-Json -Depth 10)
+        if ($payload.metadata -is [Collections.IDictionary]) {
+            $payload.metadata['race'] = $raceMeta
+        } else {
+            $payload.metadata | Add-Member -NotePropertyName race -NotePropertyValue $raceMeta -Force
+        }
+        Write-Output ($payload | ConvertTo-Json -Depth 10 -Compress)
     } catch {
         Write-Output $Race.winner.text
     }
@@ -346,7 +468,7 @@ function Emit-FallbackResult([string]$TaskType, [string]$Tool, [string]$Result, 
                 routed_by = 'vision-router'
                 attempts  = @($Attempts | ForEach-Object { [ordered]@{ name = $_.name; code = $_.code } })
             }
-        } | ConvertTo-Json -Depth 8 | Write-Output
+        } | ConvertTo-Json -Depth 8 -Compress | Write-Output
     } else {
         Write-Output $Result
     }
@@ -391,7 +513,7 @@ if ($Intent -eq 'document') {
                     error    = $last
                     attempts = @($attempts | ForEach-Object { [ordered]@{ name = $_.name; code = $_.code; message = $_.text } })
                 }
-            } | ConvertTo-Json -Depth 8 | Write-Output
+            } | ConvertTo-Json -Depth 8 -Compress | Write-Output
         } else {
             Write-Output $last
         }
@@ -420,6 +542,8 @@ if ($Intent -eq 'ocr') {
 
 if ($Intent -eq 'reason') {
     $vlm = Join-Path $scriptDir 'vlm-vision.ps1'
+    $effectiveMaxTokens = $MaxTokens
+    if ($Complex -and -not $PSBoundParameters.ContainsKey('MaxTokens')) { $effectiveMaxTokens = 2048 }
 
     $raceChannels = @()
     if (Get-EnvValue 'AGNES_API_KEY') {
@@ -435,9 +559,13 @@ if ($Intent -eq 'reason') {
         $preparedPayload = $null
         try {
             $preparedPayload = New-PreparedImagePayload $Path
-            $race = Run-RacePrepared $raceChannels $preparedPayload $Path $Prompt ([bool]$NoCache)
+            $race = Run-RacePrepared $raceChannels $preparedPayload $Path $Prompt ([bool]$NoCache) $effectiveMaxTokens $TimeoutSec
             $attempts += @($race.attempts)
-            if ($race.success) { Emit-RaceWinner $race $raceChannels; exit 0 }
+            if ($race.success) {
+                $actuallyStarted = @($race.started_channels)
+                Emit-RaceWinner $race $actuallyStarted
+                exit 0
+            }
         } catch {
             $attempts += [pscustomobject]@{
                 name = 'prepare-image-payload'
@@ -458,9 +586,9 @@ if ($Intent -eq 'reason') {
 
     foreach ($ch in $channels) {
         if ($NoCache) {
-            $attempts += Run-Step $ch { & $vlm -ImagePath $Path -Prompt $Prompt -Json -NoCache -Channel $ch }
+            $attempts += Run-Step $ch { & $vlm -ImagePath $Path -Prompt $Prompt -Json -NoCache -Channel $ch -MaxTokens $effectiveMaxTokens -TimeoutSec $TimeoutSec }
         } else {
-            $attempts += Run-Step $ch { & $vlm -ImagePath $Path -Prompt $Prompt -Json -Channel $ch }
+            $attempts += Run-Step $ch { & $vlm -ImagePath $Path -Prompt $Prompt -Json -Channel $ch -MaxTokens $effectiveMaxTokens -TimeoutSec $TimeoutSec }
         }
         if ($attempts[-1].code -eq 0) { Write-Output $attempts[-1].text; exit 0 }
     }
@@ -477,7 +605,7 @@ if ($Json) {
             error    = $last
             attempts = @($attempts | ForEach-Object { [ordered]@{ name = $_.name; code = $_.code; message = $_.text } })
         }
-    } | ConvertTo-Json -Depth 8 | Write-Output
+    } | ConvertTo-Json -Depth 8 -Compress | Write-Output
 } else {
     Write-Output $last
 }

@@ -16,7 +16,10 @@ param(
     [double]$PreparedImageSizeMB = 0,
     [switch]$Json,
     [switch]$NoCache,
-    [int]$TimeoutSec = 90
+    [ValidateRange(1, 300)]
+    [int]$TimeoutSec = 90,
+    [ValidateRange(1, 8192)]
+    [int]$MaxTokens = 1024
 )
 
 $ErrorActionPreference = 'Stop'
@@ -50,8 +53,8 @@ $channelKeys = @{
 }
 
 $channelDefaults = @{
-    glm           = @{ url = 'https://open.bigmodel.cn/api/paas/v4/chat/completions'; model = 'glm-4v-flash' }
-    'glm-thinking' = @{ url = 'https://open.bigmodel.cn/api/paas/v4/chat/completions'; model = 'glm-4.1v-thinking-flash' }
+    glm           = @{ url = if (Get-EnvValue 'GLM_BASE_URL') { Get-EnvValue 'GLM_BASE_URL' } else { 'https://open.bigmodel.cn/api/paas/v4/chat/completions' }; model = 'glm-4v-flash' }
+    'glm-thinking' = @{ url = if (Get-EnvValue 'GLM_BASE_URL') { Get-EnvValue 'GLM_BASE_URL' } else { 'https://open.bigmodel.cn/api/paas/v4/chat/completions' }; model = 'glm-4.1v-thinking-flash' }
     'agnes-2.5-flash' = @{ url = if (Get-EnvValue 'AGNES_BASE_URL') { Get-EnvValue 'AGNES_BASE_URL' } else { 'https://api.agnes-ai.cn/v1/chat/completions' }; model = 'agnes-2.5-flash' }
     'agnes-2.0-flash' = @{ url = if (Get-EnvValue 'AGNES_BASE_URL') { Get-EnvValue 'AGNES_BASE_URL' } else { 'https://api.agnes-ai.cn/v1/chat/completions' }; model = 'agnes-2.0-flash' }
     custom        = @{ url = Get-EnvValue 'VISION_CUSTOM_BASE_URL'; model = Get-EnvValue 'VISION_CUSTOM_MODEL' }
@@ -148,7 +151,7 @@ if ($PreparedImageDataUrlFile) {
 $cacheDir = Join-Path $env:USERPROFILE '.ds-vision\cache'
 $imgHash = if ($preparedImage) { [string]$preparedImage.image_sha256 } else { (Get-FileHash -Algorithm SHA256 -LiteralPath $ImagePath).Hash }
 $shaObj = [System.Security.Cryptography.SHA256]::Create()
-$cacheInput = [Text.Encoding]::UTF8.GetBytes(($imgHash + '|' + $Prompt + '|' + $Channel + '|' + $resolvedModel))
+$cacheInput = [Text.Encoding]::UTF8.GetBytes(('v2|' + $imgHash + '|' + $Prompt + '|' + $Channel + '|' + $resolvedModel + '|' + $chatUrl + '|' + $MaxTokens))
 $cacheKey = ([BitConverter]::ToString($shaObj.ComputeHash($cacheInput))).Replace('-', '').ToLower()
 $shaObj.Dispose()
 $cacheFile = Join-Path $cacheDir ($cacheKey + '.json')
@@ -158,7 +161,7 @@ if (-not $NoCache -and (Test-Path -LiteralPath $cacheFile)) {
     if ($cached.result) {
         $cached.metadata | Add-Member -NotePropertyName cached -NotePropertyValue $true -Force
         if ($Json) {
-            Write-Output ($cached | ConvertTo-Json -Depth 6)
+            Write-Output ($cached | ConvertTo-Json -Depth 6 -Compress)
         } else {
             Write-Output $cached.result
         }
@@ -208,7 +211,8 @@ if ($preparedImage) {
 
 $content = @(@{ type = 'image_url'; image_url = @{ url = $dataUrl } })
 if ($Prompt) { $content += @{ type = 'text'; text = $Prompt } }
-$body = @{ model = $resolvedModel; messages = @(@{ role = 'user'; content = $content }) } | ConvertTo-Json -Depth 12
+$requestPayload = @{ model = $resolvedModel; messages = @(@{ role = 'user'; content = $content }); max_tokens = $MaxTokens }
+$body = $requestPayload | ConvertTo-Json -Depth 12 -Compress
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 try {
@@ -239,13 +243,16 @@ try {
                 image_mb   = $sizeMB
                 prepared_payload = [bool]$preparedImage
                 latency_ms = $sw.ElapsedMilliseconds
+                max_tokens = $MaxTokens
                 cached     = $false
             }
         }
-        if (-not (Test-Path -LiteralPath $cacheDir)) { New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null }
-        $envelope | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $cacheFile -Encoding UTF8
+        if (-not $NoCache) {
+            if (-not (Test-Path -LiteralPath $cacheDir)) { New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null }
+            $envelope | ConvertTo-Json -Depth 6 -Compress | Set-Content -LiteralPath $cacheFile -Encoding UTF8
+        }
         if ($Json) {
-            Write-Output ($envelope | ConvertTo-Json -Depth 6)
+            Write-Output ($envelope | ConvertTo-Json -Depth 6 -Compress)
         } else {
             Write-Output $content
         }

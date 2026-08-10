@@ -43,7 +43,7 @@ if ($existingMd) {
                 cached = $true
             }
         }
-        Write-Output ($envelope | ConvertTo-Json -Depth 5)
+        Write-Output ($envelope | ConvertTo-Json -Depth 5 -Compress)
     } else {
         Write-Output $content
     }
@@ -87,7 +87,7 @@ if ($Json) {
             cached = $false
         }
     }
-    Write-Output ($envelope | ConvertTo-Json -Depth 5)
+    Write-Output ($envelope | ConvertTo-Json -Depth 5 -Compress)
 } else {
     Write-Output $content
 }

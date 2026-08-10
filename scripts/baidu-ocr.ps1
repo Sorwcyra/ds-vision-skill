@@ -109,7 +109,7 @@ if ($Json) {
             token_cached = $tokenCached
         }
     }
-    Write-Output ($envelope | ConvertTo-Json -Depth 5)
+    Write-Output ($envelope | ConvertTo-Json -Depth 5 -Compress)
 } else {
     foreach ($l in $lines) { Write-Output $l }
 }
