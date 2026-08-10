@@ -6,8 +6,8 @@
 
 | 通道 | 类别 | Base URL | 默认模型 | 环境变量 | 备注 |
 |---|---|---|---|---|---|
-| `glm` | 简单视觉理解 | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | `glm-4v-flash` | `GLM_API_KEY` | 快路径 |
-| `glm-thinking` | 复杂视觉推理 | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | `glm-4.1v-thinking-flash` | `GLM_API_KEY` | 图表、数学、复杂 UI |
+| `glm` | 简单视觉理解 | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | `glm-4v-flash` | `GLM_API_KEY` | 快路径，可用 `GLM_BASE_URL` 覆盖 |
+| `glm-thinking` | 复杂视觉推理 | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | `glm-4.1v-thinking-flash` | `GLM_API_KEY` | 图表、数学、复杂 UI，可用 `GLM_BASE_URL` 覆盖 |
 | `agnes-2.5-flash` | 快速视觉理解 | `https://api.agnes-ai.cn/v1/chat/completions` | `agnes-2.5-flash` | `AGNES_API_KEY` | OpenAI 兼容接口，可用 `AGNES_BASE_URL` 覆盖 |
 | `agnes-2.0-flash` | 备用快速视觉理解 | `https://api.agnes-ai.cn/v1/chat/completions` | `agnes-2.0-flash` | `AGNES_API_KEY` | OpenAI 兼容接口，可用 `AGNES_BASE_URL` 覆盖 |
 | `custom-1` | 第三方视觉模型槽 1 | `VISION_CUSTOM_1_BASE_URL` | `VISION_CUSTOM_1_MODEL` | `VISION_CUSTOM_1_API_KEY` | OpenAI 兼容接口 |

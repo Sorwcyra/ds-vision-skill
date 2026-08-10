@@ -1,11 +1,11 @@
 {
   "name": "ds-vision-skill",
-  "version": "0.4.2",
-  "updated": "2026-08-07",
+  "version": "0.5.0",
+  "updated": "2026-08-10",
   "repository": "https://github.com/Sorwcyra/ds-vision-skill",
   "release_notes": [
-    "Switched race-channel fanout from child PowerShell processes to in-process runspaces.",
-    "Prepared image data once per race and shared it across channel workers.",
-    "Preserved result-cache behavior while avoiding base64 generation on cache hits."
+    "Preserved simultaneous racing across all four vision models.",
+    "Moved the race hot path to asynchronous HttpClient requests with no polling waits.",
+    "Reduced repeated serialization and enabled compact JSON output."
   ]
 }

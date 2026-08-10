@@ -20,7 +20,7 @@
   <a href="https://github.com/Sorwcyra/ds-vision-skill/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/Sorwcyra/ds-vision-skill?style=flat&label=last%20commit"></a>
   <a href="https://github.com/Sorwcyra/ds-vision-skill/issues"><img alt="Issues" src="https://img.shields.io/github/issues/Sorwcyra/ds-vision-skill?style=flat&label=issues"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Sorwcyra/ds-vision-skill?style=flat&label=license"></a>
-  <a href="VERSION"><img alt="Version" src="https://img.shields.io/badge/version-0.4.2-0ea5e9?style=flat"></a>
+  <a href="VERSION"><img alt="Version" src="https://img.shields.io/badge/version-0.5.0-0ea5e9?style=flat"></a>
   <a href="https://github.com/Sorwcyra/ds-vision-skill"><img alt="Auto sync" src="https://img.shields.io/badge/auto--sync-ready-16a34a?style=flat"></a>
 </p>
 
@@ -52,7 +52,7 @@ scripts\setup.ps1 -SetKey -Channel glm -Key <GLM_API_KEY> -Verify
 scripts\setup.ps1 -SetKey -Channel agnes-2.5-flash -Key <AGNES_API_KEY> -Verify
 ```
 
-检查环境：
+仅在首次配置或诊断失败时检查环境；正常分析不要每次运行 preflight：
 
 ```powershell
 scripts\setup.ps1 -Status
@@ -71,7 +71,10 @@ scripts\vision-router.ps1 -Path <文件路径> -Prompt "请分析这个文件" -
 scripts\vision-router.ps1 -Path <图片路径> -Intent ocr -Json
 scripts\vision-router.ps1 -Path <PDF路径> -Intent document -Json
 scripts\vision-router.ps1 -Path <图片路径> -Intent reason -Complex -Json
+scripts\vision-router.ps1 -Path <图片路径> -Intent reason -MaxTokens 512 -TimeoutSec 30 -Json
 ```
+
+`-MaxTokens` 默认 `1024`，可调低以缩短生成结果；`-TimeoutSec` 默认 `90`，控制整场竞速的最长等待时间。`-NoCache` 会同时跳过缓存读取和写入。
 
 ## 路由模型
 
@@ -103,6 +106,8 @@ flowchart LR
 OCR: baidu-ocr -> windows-ocr -> vision reasoning
 文档解析: mineru flash -> mineru extract
 ```
+
+每次正常竞速都会让上述四个视觉模型同时开始请求，并采用第一个有效结果。
 
 在 `auto` 模式下，图片默认先进入视觉推理。纯 OCR 请使用 `-Intent ocr`；低清扫描件或票据类图片可以使用 `-AccurateOcr`。
 
