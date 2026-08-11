@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-labelledby="title desc">
+  <title id="title">Four-model race speed across ds-vision-skill versions</title>
+  <desc id="desc">Grouped bar chart of deterministic Mock benchmark wall-clock p50 and p95. Version 0.4.1 measured 3250.604 and 3466.575 milliseconds, version 0.4.2 measured 1858.165 and 1948.726 milliseconds, and version 0.5.0 measured 1793.656 and 1859.934 milliseconds. Lower is faster.</desc>
+  <rect width="1200" height="680" rx="24" fill="#0b1220"/>
+
+  <text x="60" y="58" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">Four-model race speed / 四模型竞速耗时</text>
+  <text x="60" y="92" fill="#94a3b8" font-family="Segoe UI, Arial, sans-serif" font-size="17">Deterministic Mock · 24 measured runs per release · lower is faster / 越低越快</text>
+
+  <rect x="774" y="42" width="16" height="16" rx="3" fill="#a78bfa"/>
+  <text x="800" y="56" fill="#cbd5e1" font-family="Segoe UI, Arial, sans-serif" font-size="16">Wall p50</text>
+  <rect x="910" y="42" width="16" height="16" rx="3" fill="#34d399"/>
+  <text x="936" y="56" fill="#cbd5e1" font-family="Segoe UI, Arial, sans-serif" font-size="16">Wall p95</text>
+
+  <rect x="774" y="76" width="366" height="62" rx="12" fill="#172033" stroke="#334155"/>
+  <text x="796" y="101" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700">0.5.0 vs 0.4.1</text>
+  <text x="796" y="125" fill="#c4b5fd" font-family="Segoe UI, Arial, sans-serif" font-size="17">p50 −44.82%   ·   p95 −46.35%</text>
+
+  <g fill="none" stroke="#334155" stroke-width="1">
+    <line x1="110" y1="140" x2="1140" y2="140"/>
+    <line x1="110" y1="240" x2="1140" y2="240"/>
+    <line x1="110" y1="340" x2="1140" y2="340"/>
+    <line x1="110" y1="440" x2="1140" y2="440"/>
+    <line x1="110" y1="540" x2="1140" y2="540"/>
+  </g>
+
+  <g fill="#94a3b8" font-family="Segoe UI, Arial, sans-serif" font-size="14" text-anchor="end">
+    <text x="96" y="145">4000</text>
+    <text x="96" y="245">3000</text>
+    <text x="96" y="345">2000</text>
+    <text x="96" y="445">1000</text>
+    <text x="96" y="545">0</text>
+  </g>
+  <text x="30" y="350" fill="#94a3b8" font-family="Segoe UI, Arial, sans-serif" font-size="14" text-anchor="middle" transform="rotate(-90 30 350)">Wall time / 总耗时 (ms)</text>
+
+  <g>
+    <rect x="185" y="214.94" width="90" height="325.06" rx="7" fill="#a78bfa"/>
+    <rect x="295" y="193.34" width="90" height="346.66" rx="7" fill="#34d399"/>
+    <text x="230" y="200" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" text-anchor="middle">3251</text>
+    <text x="340" y="178" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" text-anchor="middle">3467</text>
+    <text x="285" y="578" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700" text-anchor="middle">0.4.1</text>
+  </g>
+
+  <g>
+    <rect x="500" y="354.18" width="90" height="185.82" rx="7" fill="#a78bfa"/>
+    <rect x="610" y="345.13" width="90" height="194.87" rx="7" fill="#34d399"/>
+    <text x="545" y="339" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" text-anchor="middle">1858</text>
+    <text x="655" y="330" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" text-anchor="middle">1949</text>
+    <text x="600" y="578" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700" text-anchor="middle">0.4.2</text>
+  </g>
+
+  <g>
+    <rect x="815" y="360.63" width="90" height="179.37" rx="7" fill="#a78bfa"/>
+    <rect x="925" y="354.01" width="90" height="185.99" rx="7" fill="#34d399"/>
+    <text x="860" y="345" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" text-anchor="middle">1794</text>
+    <text x="970" y="339" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" text-anchor="middle">1860</text>
+    <text x="915" y="578" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700" text-anchor="middle">0.5.0</text>
+  </g>
+
+  <line x1="60" y1="612" x2="1140" y2="612" stroke="#334155"/>
+  <text x="60" y="642" fill="#cbd5e1" font-family="Segoe UI, Arial, sans-serif" font-size="15">All four models raced concurrently in every release / 三个版本均保留四模型并发竞速</text>
+  <text x="1140" y="642" fill="#94a3b8" font-family="Segoe UI, Arial, sans-serif" font-size="13" text-anchor="end">Source: cross-version-mock-2026-08-11.json</text>
+</svg>

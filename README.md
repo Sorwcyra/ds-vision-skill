@@ -42,6 +42,8 @@ Many coding and reasoning agents are excellent with text but awkward around visu
 
 ## Cross-Version Speed
 
+[![Cross-version four-model race benchmark: 0.5.0 cuts median wall time by 44.82% versus 0.4.1](assets/benchmark-speed.svg)](references/benchmarks.md)
+
 Deterministic Mock benchmark, 24 measured runs per release:
 
 | Release | Wall p50 (ms) | Wall p95 (ms) | Fanout p50 (ms) | First-ready selected |

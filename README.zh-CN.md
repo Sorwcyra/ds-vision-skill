@@ -42,6 +42,8 @@
 
 ## 跨版本速度
 
+[![跨版本四模型竞速基准：0.5.0 相比 0.4.1 将整体耗时中位数降低 44.82%](assets/benchmark-speed.svg)](references/benchmarks.md)
+
 确定性 Mock 基准，每个版本 24 次正式测量：
 
 | 版本 | 整体耗时 p50（ms） | 整体耗时 p95（ms） | 并发扇出 p50（ms） | 选中最先就绪结果 |
