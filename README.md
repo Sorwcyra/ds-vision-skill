@@ -40,6 +40,18 @@ Many coding and reasoning agents are excellent with text but awkward around visu
 | Use a private or relay model | `custom-1`, `custom-2`, `custom-3` |
 | Keep sensitive work local | local runtime fallback |
 
+## Cross-Version Speed
+
+Deterministic Mock benchmark, 24 measured runs per release:
+
+| Release | Wall p50 (ms) | Wall p95 (ms) | Fanout p50 (ms) | First-ready selected |
+|---|---:|---:|---:|---:|
+| 0.4.1 | 3250.604 | 3466.575 | 91.021 | 91.67% |
+| 0.4.2 | 1858.165 | 1948.726 | 3.130 | 91.67% |
+| 0.5.0 | 1793.656 | 1859.934 | 3.188 | 100% |
+
+Version 0.5.0 keeps all four models in the concurrent race while reducing wall p50 by 44.82% and p95 by 46.35% versus 0.4.1. See the [cross-version benchmark methodology and raw data](references/benchmarks.md). Live provider results use only 6 runs per release, vary substantially, and are reported separately.
+
 ## Quick Start
 
 Configure the free race pool first:

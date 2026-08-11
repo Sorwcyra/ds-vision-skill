@@ -1,0 +1,2 @@
+scripts/benchmark-race.ps1 text eol=lf
+scripts/benchmark-mock.py text eol=lf

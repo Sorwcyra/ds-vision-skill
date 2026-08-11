@@ -83,3 +83,4 @@ scripts/preflight.ps1 -Json
 - PowerShell 脚本源码保持 ASCII-only，中文通过参数传入。
 - 面向用户的 Markdown 文档使用 UTF-8。
 - 新增通道时优先接入 `vision-router.ps1`，再补充 README 和 `references/channels.md`。
+- 评估性能或发布版本时先阅读[跨版本基准方法与数据](references/benchmarks.md)，并用 [`scripts/benchmark-race.ps1`](scripts/benchmark-race.ps1) 复现；不要仅凭单次 Live 请求下结论。

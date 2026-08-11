@@ -1,11 +1,12 @@
 {
   "name": "ds-vision-skill",
   "version": "0.5.0",
-  "updated": "2026-08-10",
+  "updated": "2026-08-11",
   "repository": "https://github.com/Sorwcyra/ds-vision-skill",
   "release_notes": [
     "Preserved simultaneous racing across all four vision models.",
     "Moved the race hot path to asynchronous HttpClient requests with no polling waits.",
-    "Reduced repeated serialization and enabled compact JSON output."
+    "Reduced repeated serialization and enabled compact JSON output.",
+    "Added reproducible 0.4.1 -> 0.4.2 -> 0.5.0 benchmarks with methodology and raw Mock/Live data."
   ]
 }

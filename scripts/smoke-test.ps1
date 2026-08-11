@@ -41,13 +41,46 @@ try {
 
 Write-Output ''
 Write-Output '### Docs'
-foreach ($doc in @('SKILL.md','README.md','VERSION','version.json','references\channels.md','agents\openai.yaml')) {
+foreach ($doc in @(
+    'SKILL.md',
+    'README.md',
+    'VERSION',
+    'version.json',
+    'references\channels.md',
+    'references\benchmarks.md',
+    'benchmarks\cross-version-mock-2026-08-11.json',
+    'benchmarks\cross-version-live-2026-08-11.json',
+    'agents\openai.yaml'
+)) {
     $path = Join-Path $root $doc
     if (Test-Path -LiteralPath $path) {
         Write-Output ("- {0}: OK" -f $doc)
     } else {
         $failed = $true
         Write-Output ("- {0}: FAIL (missing)" -f $doc)
+    }
+}
+
+Write-Output ''
+Write-Output '### Benchmark data'
+foreach ($resultFile in @(
+    'benchmarks\cross-version-mock-2026-08-11.json',
+    'benchmarks\cross-version-live-2026-08-11.json'
+)) {
+    try {
+        $resultPath = Join-Path $root $resultFile
+        $result = Get-Content -Raw -Encoding UTF8 -LiteralPath $resultPath | ConvertFrom-Json
+        $versions = @($result.summary | ForEach-Object { $_.version } | Sort-Object)
+        $expected = @('0.4.1', '0.4.2', '0.5.0')
+        if ($result.benchmark_valid -and (($versions -join '|') -eq ($expected -join '|')) -and @($result.samples).Count -gt 0) {
+            Write-Output ("- {0}: OK" -f $resultFile)
+        } else {
+            $failed = $true
+            Write-Output ("- {0}: FAIL (invalid result contract)" -f $resultFile)
+        }
+    } catch {
+        $failed = $true
+        Write-Output ("- {0}: FAIL ({1})" -f $resultFile, $_.Exception.Message)
     }
 }
 
