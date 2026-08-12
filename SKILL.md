@@ -1,7 +1,7 @@
 ---
 name: ds-vision-skill
 metadata:
-  version: 0.5.0
+  version: 0.5.1
   repository: https://github.com/Sorwcyra/ds-vision-skill
 description: >
   为纯文本推理模型补充视觉能力。用户提供图片、截图、照片、图表、UI 截图、代码截图、数学题图片、
@@ -19,8 +19,10 @@ description: >
 优先使用统一路由脚本：
 
 ```powershell
-scripts/vision-router.ps1 -Path <file> -Prompt "<user request>" -Intent auto -Json
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/vision-router.ps1 -Path "path/to/file.png" -Prompt "user request" -Intent auto -Json
 ```
+
+如果 harness 默认使用 `cmd.exe`（例如 Zcode 或某些 Codex/Hermes 包装器），优先调用 `scripts/setup.cmd` 和 `scripts/vision-router.cmd`。不要把 PowerShell 专用语法或 `<KEY>` 占位符粘到 `cmd.exe` 中；`cmd.exe` 会把尖括号当成重定向符号，配置 key 时请使用 `"YOUR_KEY"` 这样的引号占位或真实引号值。
 
 常用参数：
 
@@ -68,8 +70,8 @@ scripts/vision-router.ps1 -Path <file> -Prompt "<user request>" -Intent auto -Js
 只在首次配置、诊断问题或所有通道失败时运行；正常执行不要在每次分析前运行：
 
 ```powershell
-scripts/preflight.ps1
-scripts/preflight.ps1 -Json
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/preflight.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/preflight.ps1 -Json
 ```
 
 `-Json` 用于自动化读取通道、工具和本地运行时状态。
@@ -82,5 +84,6 @@ scripts/preflight.ps1 -Json
 
 - PowerShell 脚本源码保持 ASCII-only，中文通过参数传入。
 - 面向用户的 Markdown 文档使用 UTF-8。
+- 面向 harness 或新用户的可复制 Windows 命令必须显式选择 shell：配置用 `scripts/setup.cmd`，路由用 `scripts/vision-router.cmd`，或完整写出 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...`。不要在 cmd 示例中使用 `<KEY>` 形式的占位符。
 - 新增通道时优先接入 `vision-router.ps1`，再补充 README 和 `references/channels.md`。
 - 评估性能或发布版本时先阅读[跨版本基准方法与数据](references/benchmarks.md)，并用 [`scripts/benchmark-race.ps1`](scripts/benchmark-race.ps1) 复现；不要仅凭单次 Live 请求下结论。

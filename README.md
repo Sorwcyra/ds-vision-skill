@@ -20,7 +20,7 @@
   <a href="https://github.com/Sorwcyra/ds-vision-skill/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/Sorwcyra/ds-vision-skill?style=flat&label=last%20commit"></a>
   <a href="https://github.com/Sorwcyra/ds-vision-skill/issues"><img alt="Issues" src="https://img.shields.io/github/issues/Sorwcyra/ds-vision-skill?style=flat&label=issues"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Sorwcyra/ds-vision-skill?style=flat&label=license"></a>
-  <a href="VERSION"><img alt="Version" src="https://img.shields.io/badge/version-0.5.0-0ea5e9?style=flat"></a>
+  <a href="VERSION"><img alt="Version" src="https://img.shields.io/badge/version-0.5.1-0ea5e9?style=flat"></a>
   <a href="https://github.com/Sorwcyra/ds-vision-skill"><img alt="Auto sync" src="https://img.shields.io/badge/auto--sync-ready-16a34a?style=flat"></a>
 </p>
 
@@ -58,34 +58,36 @@ Version 0.5.0 keeps all four models in the concurrent race while reducing wall p
 
 Configure the free race pool first:
 
-```powershell
+These commands are safe in harnesses that default to `cmd.exe` (Zcode, some Codex/Hermes wrappers) because they call the PowerShell script through a `.cmd` launcher. Do not paste PowerShell-only syntax or `<KEY>` placeholders into `cmd.exe`; quote the real key instead.
+
+```cmd
 # GLM enables both glm and glm-thinking
-scripts\setup.ps1 -SetKey -Channel glm -Key <GLM_API_KEY> -Verify
+scripts\setup.cmd -SetKey -Channel glm -Key "YOUR_GLM_API_KEY" -Verify
 
 # Agnes enables both agnes-2.5-flash and agnes-2.0-flash
-scripts\setup.ps1 -SetKey -Channel agnes-2.5-flash -Key <AGNES_API_KEY> -Verify
+scripts\setup.cmd -SetKey -Channel agnes-2.5-flash -Key "YOUR_AGNES_API_KEY" -Verify
 ```
 
 Check your environment once during setup or when diagnosing a failure. Do not run preflight before every normal analysis:
 
-```powershell
-scripts\setup.ps1 -Status
-scripts\preflight.ps1
+```cmd
+scripts\setup.cmd -Status
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\preflight.ps1
 ```
 
 Analyze any supported file through the single router:
 
-```powershell
-scripts\vision-router.ps1 -Path <file> -Prompt "Analyze this file" -Json
+```cmd
+scripts\vision-router.cmd -Path "path\to\file.png" -Prompt "Analyze this file" -Json
 ```
 
 Use an explicit route when the task is clear:
 
-```powershell
-scripts\vision-router.ps1 -Path <image> -Intent ocr -Json
-scripts\vision-router.ps1 -Path <pdf> -Intent document -Json
-scripts\vision-router.ps1 -Path <image> -Intent reason -Complex -Json
-scripts\vision-router.ps1 -Path <image> -Intent reason -MaxTokens 512 -TimeoutSec 30 -Json
+```cmd
+scripts\vision-router.cmd -Path "path\to\image.png" -Intent ocr -Json
+scripts\vision-router.cmd -Path "path\to\document.pdf" -Intent document -Json
+scripts\vision-router.cmd -Path "path\to\image.png" -Intent reason -Complex -Json
+scripts\vision-router.cmd -Path "path\to\image.png" -Intent reason -MaxTokens 512 -TimeoutSec 30 -Json
 ```
 
 `-MaxTokens` defaults to `1024` and can be lowered for shorter generations. `-TimeoutSec` defaults to `90` and caps the whole race. `-NoCache` skips both cache reads and writes.
@@ -147,10 +149,10 @@ See [references/channels.md](references/channels.md) for the full channel table.
 
 Plug in any OpenAI-compatible vision endpoint:
 
-```powershell
-scripts\setup.ps1 -SetCustom -Slot 1 -BaseUrl <url> -Key <key> -Model <model> -Verify
-scripts\setup.ps1 -SetCustom -Slot 2 -BaseUrl <url> -Key <key> -Model <model> -Verify
-scripts\setup.ps1 -SetCustom -Slot 3 -BaseUrl <url> -Key <key> -Model <model> -Verify
+```cmd
+scripts\setup.cmd -SetCustom -Slot 1 -BaseUrl "https://example.com/v1/chat/completions" -Key "YOUR_API_KEY" -Model "YOUR_MODEL" -Verify
+scripts\setup.cmd -SetCustom -Slot 2 -BaseUrl "https://example.com/v1/chat/completions" -Key "YOUR_API_KEY" -Model "YOUR_MODEL" -Verify
+scripts\setup.cmd -SetCustom -Slot 3 -BaseUrl "https://example.com/v1/chat/completions" -Key "YOUR_API_KEY" -Model "YOUR_MODEL" -Verify
 ```
 
 The router tries these slots only after the free race pool fails.
@@ -193,16 +195,16 @@ Before opening a pull request:
 4. Run the smoke or preflight checks when the change touches scripts.
 
 ```powershell
-scripts\preflight.ps1
-scripts\smoke-test.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\preflight.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\smoke-test.ps1
 ```
 
 ## Updates
 
 ```powershell
-scripts\check-update.ps1
-scripts\check-update.ps1 -Notify
-scripts\update-skill.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\check-update.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\check-update.ps1 -Notify
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\update-skill.ps1
 ```
 
 Installed skills are local copies. GitHub updates do not automatically update a user's local installation.

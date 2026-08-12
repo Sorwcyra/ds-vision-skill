@@ -1,12 +1,13 @@
 {
   "name": "ds-vision-skill",
-  "version": "0.5.0",
-  "updated": "2026-08-11",
+  "version": "0.5.1",
+  "updated": "2026-08-12",
   "repository": "https://github.com/Sorwcyra/ds-vision-skill",
   "release_notes": [
     "Preserved simultaneous racing across all four vision models.",
     "Moved the race hot path to asynchronous HttpClient requests with no polling waits.",
     "Reduced repeated serialization and enabled compact JSON output.",
-    "Added reproducible 0.4.1 -> 0.4.2 -> 0.5.0 benchmarks with methodology and raw Mock/Live data."
+    "Added reproducible 0.4.1 -> 0.4.2 -> 0.5.0 benchmarks with methodology and raw Mock/Live data.",
+    "Added cmd.exe-safe setup and router launchers plus harness guidance for Zcode/Codex/Hermes wrappers."
   ]
 }

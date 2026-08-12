@@ -24,6 +24,25 @@ foreach ($f in Get-ChildItem -Path $PSScriptRoot -Filter *.ps1) {
 }
 
 Write-Output ''
+Write-Output '### cmd.exe launchers'
+foreach ($launcher in @('setup.cmd', 'vision-router.cmd')) {
+    $path = Join-Path $PSScriptRoot $launcher
+    if (Test-Path -LiteralPath $path) {
+        Write-Output ("- {0}: OK" -f $launcher)
+    } else {
+        $failed = $true
+        Write-Output ("- {0}: FAIL (missing)" -f $launcher)
+    }
+}
+$cmdSmoke = & cmd.exe /d /c "`"$PSScriptRoot\setup.cmd`" -Status" 2>&1
+if ($LASTEXITCODE -eq 0) {
+    Write-Output '- setup.cmd -Status: OK'
+} else {
+    $failed = $true
+    Write-Output ("- setup.cmd -Status: FAIL ({0})" -f ($cmdSmoke | Out-String).Trim())
+}
+
+Write-Output ''
 Write-Output '### Preflight JSON'
 $preflight = Join-Path $PSScriptRoot 'preflight.ps1'
 try {

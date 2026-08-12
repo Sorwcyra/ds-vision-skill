@@ -3,12 +3,14 @@
 # user, and calls this script to inspect, persist, verify, or remove settings.
 #
 # Usage:
+#   scripts\setup.cmd -Status                         # cmd.exe-safe launcher
+#   scripts\setup.cmd -SetKey -Channel glm -Key "YOUR_GLM_API_KEY" -Verify
 #   setup.ps1 -Status
 #   setup.ps1 -Help
-#   setup.ps1 -SetKey -Channel <ch> -Key <value> [-Secret <value>] [-BaseUrl <url>] [-Verify] [-Force]
-#   setup.ps1 -RemoveKey -Channel <ch|custom|custom-1|custom-2|custom-3>
-#   setup.ps1 -SetCustom [-Slot 1|2|3] -BaseUrl <url> -Key <value> -Model <model> [-Verify] [-Force]
-#   setup.ps1 -Verify -Channel <ch> [-ImagePath <path>]
+#   setup.ps1 -SetKey -Channel CHANNEL -Key "YOUR_KEY" [-Secret "YOUR_SECRET"] [-BaseUrl "URL"] [-Verify] [-Force]
+#   setup.ps1 -RemoveKey -Channel CHANNEL
+#   setup.ps1 -SetCustom [-Slot 1|2|3] -BaseUrl "URL" -Key "YOUR_KEY" -Model "MODEL" [-Verify] [-Force]
+#   setup.ps1 -Verify -Channel CHANNEL [-ImagePath "PATH"]
 
 param(
     [switch]$Status,
@@ -128,31 +130,36 @@ function Show-Status {
     Write-Output ("- ollama 11434: {0} | lmstudio 1234: {1} | llamacpp 8080: {2}" -f (Test-Port 11434), (Test-Port 1234), (Test-Port 8080))
     Write-Output ''
     Write-Output '### Next steps'
-    Write-Output '- Run "setup.ps1 -Help" for registration links and per-channel commands.'
+    Write-Output '- Run "scripts\setup.cmd -Help" for registration links and cmd.exe-safe commands.'
     Write-Output '- First configure free race channels: glm and agnes-2.5-flash.'
-    Write-Output '- Optional third-party slots: setup.ps1 -SetCustom -Slot <1|2|3> -BaseUrl <url> -Key <key> -Model <model>'
+    Write-Output '- Optional third-party slots: scripts\setup.cmd -SetCustom -Slot 1 -BaseUrl "URL" -Key "YOUR_KEY" -Model "MODEL"'
 }
 
 function Show-Help {
     Write-Output '## DS Vision Skill - Registration Guide'
     Write-Output ''
+    Write-Output '### Shell safety'
+    Write-Output '- If a harness defaults to cmd.exe (Zcode, some Codex/Hermes wrappers), use scripts\setup.cmd.'
+    Write-Output '- Do not paste PowerShell-only syntax or <KEY> placeholders into cmd.exe; quote real values instead.'
+    Write-Output '- Equivalent explicit launcher: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1 ...'
+    Write-Output ''
     foreach ($c in ($channels.Keys | Sort-Object)) {
         $info = $channels[$c]
-        $secret = if ($info.envs.Count -gt 1) { ' [-Secret <' + $info.envs[1] + '>]' } else { '' }
+        $secret = if ($info.envs.Count -gt 1) { ' -Secret "YOUR_' + $info.envs[1] + '"' } else { '' }
         Write-Output ("### {0} ({1})" -f $c, $info.name)
         Write-Output ("- Sign up: {0}" -f $info.signup)
         Write-Output ("- Env vars: {0}" -f ($info.envs -join ' + '))
-        $base = if ($c -like 'agnes-*') { ' [-BaseUrl <url>]' } else { '' }
-        Write-Output ("- Enable: setup.ps1 -SetKey -Channel {0} -Key <key>{1}{2} -Verify" -f $c, $secret, $base)
+        $base = if ($c -like 'agnes-*') { ' -BaseUrl "https://api.agnes-ai.cn/v1/chat/completions"' } else { '' }
+        Write-Output ("- Enable: scripts\setup.cmd -SetKey -Channel {0} -Key ""YOUR_{1}""{2}{3} -Verify" -f $c, $info.envs[0], $secret, $base)
         Write-Output ''
     }
     Write-Output '### custom-1 / custom-2 / custom-3 (third-party OpenAI-compatible slots)'
     Write-Output '- Env vars: VISION_CUSTOM_<slot>_BASE_URL + VISION_CUSTOM_<slot>_API_KEY + VISION_CUSTOM_<slot>_MODEL'
-    Write-Output '- Enable: setup.ps1 -SetCustom -Slot <1|2|3> -BaseUrl <url> -Key <key> -Model <model> -Verify'
+    Write-Output '- Enable: scripts\setup.cmd -SetCustom -Slot 1 -BaseUrl "https://example.com/v1/chat/completions" -Key "YOUR_API_KEY" -Model "YOUR_MODEL" -Verify'
     Write-Output ''
     Write-Output '### local (offline / privacy)'
     Write-Output '- Install Ollama: winget install Ollama.Ollama, then: ollama pull qwen2.5-vl:3b'
-    Write-Output '- Or run LM Studio / llama.cpp on their default ports; then: setup.ps1 -Status'
+    Write-Output '- Or run LM Studio / llama.cpp on their default ports; then: scripts\setup.cmd -Status'
     Write-Output '- Model selection: scripts/local-select.ps1 -Force'
 }
 
@@ -245,12 +252,12 @@ $primary = @([bool]$Status, [bool]$Help, [bool]$SetKey, [bool]$RemoveKey, [bool]
 $primaryCount = ($primary | Where-Object { $_ }).Count
 if ($primaryCount -ne 1 -and -not ($primaryCount -eq 0 -and $Verify)) {
     Write-Output 'Usage:'
-    Write-Output '  setup.ps1 -Status'
-    Write-Output '  setup.ps1 -Help'
-    Write-Output '  setup.ps1 -SetKey -Channel <ch> -Key <value> [-Secret <value>] [-BaseUrl <url>] [-Verify] [-Force]'
-    Write-Output '  setup.ps1 -RemoveKey -Channel <ch|custom|custom-1|custom-2|custom-3>'
-    Write-Output '  setup.ps1 -SetCustom [-Slot 1|2|3] -BaseUrl <url> -Key <value> -Model <model> [-Verify] [-Force]'
-    Write-Output '  setup.ps1 -Verify -Channel <ch> [-ImagePath <path>]'
+    Write-Output '  scripts\setup.cmd -Status'
+    Write-Output '  scripts\setup.cmd -Help'
+    Write-Output '  scripts\setup.cmd -SetKey -Channel glm -Key "YOUR_GLM_API_KEY" [-Verify]'
+    Write-Output '  scripts\setup.cmd -RemoveKey -Channel glm'
+    Write-Output '  scripts\setup.cmd -SetCustom -Slot 1 -BaseUrl "URL" -Key "YOUR_KEY" -Model "MODEL" [-Verify]'
+    Write-Output '  powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1 -Verify -Channel glm'
     exit 1
 }
 

@@ -20,7 +20,7 @@
   <a href="https://github.com/Sorwcyra/ds-vision-skill/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/Sorwcyra/ds-vision-skill?style=flat&label=last%20commit"></a>
   <a href="https://github.com/Sorwcyra/ds-vision-skill/issues"><img alt="Issues" src="https://img.shields.io/github/issues/Sorwcyra/ds-vision-skill?style=flat&label=issues"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Sorwcyra/ds-vision-skill?style=flat&label=license"></a>
-  <a href="VERSION"><img alt="Version" src="https://img.shields.io/badge/version-0.5.0-0ea5e9?style=flat"></a>
+  <a href="VERSION"><img alt="Version" src="https://img.shields.io/badge/version-0.5.1-0ea5e9?style=flat"></a>
   <a href="https://github.com/Sorwcyra/ds-vision-skill"><img alt="Auto sync" src="https://img.shields.io/badge/auto--sync-ready-16a34a?style=flat"></a>
 </p>
 
@@ -58,34 +58,36 @@
 
 先配置免费竞速池：
 
-```powershell
+下面这些命令可以直接给默认使用 `cmd.exe` 的 harness（例如 Zcode、部分 Codex/Hermes 包装器）执行，因为 `.cmd` 启动器会显式调用 PowerShell。不要把 PowerShell 专用语法或 `<KEY>` 占位符粘到 `cmd.exe` 里；真实 key 请加引号。
+
+```cmd
 # GLM: 同一个 key 同时启用 glm + glm-thinking
-scripts\setup.ps1 -SetKey -Channel glm -Key <GLM_API_KEY> -Verify
+scripts\setup.cmd -SetKey -Channel glm -Key "YOUR_GLM_API_KEY" -Verify
 
 # Agnes: 同一个 key 同时启用 agnes-2.5-flash + agnes-2.0-flash
-scripts\setup.ps1 -SetKey -Channel agnes-2.5-flash -Key <AGNES_API_KEY> -Verify
+scripts\setup.cmd -SetKey -Channel agnes-2.5-flash -Key "YOUR_AGNES_API_KEY" -Verify
 ```
 
 仅在首次配置或诊断失败时检查环境；正常分析不要每次运行 preflight：
 
-```powershell
-scripts\setup.ps1 -Status
-scripts\preflight.ps1
+```cmd
+scripts\setup.cmd -Status
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\preflight.ps1
 ```
 
 通过统一入口分析文件：
 
-```powershell
-scripts\vision-router.ps1 -Path <文件路径> -Prompt "请分析这个文件" -Json
+```cmd
+scripts\vision-router.cmd -Path "path\to\file.png" -Prompt "请分析这个文件" -Json
 ```
 
 任务明确时可以指定路由：
 
-```powershell
-scripts\vision-router.ps1 -Path <图片路径> -Intent ocr -Json
-scripts\vision-router.ps1 -Path <PDF路径> -Intent document -Json
-scripts\vision-router.ps1 -Path <图片路径> -Intent reason -Complex -Json
-scripts\vision-router.ps1 -Path <图片路径> -Intent reason -MaxTokens 512 -TimeoutSec 30 -Json
+```cmd
+scripts\vision-router.cmd -Path "path\to\image.png" -Intent ocr -Json
+scripts\vision-router.cmd -Path "path\to\document.pdf" -Intent document -Json
+scripts\vision-router.cmd -Path "path\to\image.png" -Intent reason -Complex -Json
+scripts\vision-router.cmd -Path "path\to\image.png" -Intent reason -MaxTokens 512 -TimeoutSec 30 -Json
 ```
 
 `-MaxTokens` 默认 `1024`，可调低以缩短生成结果；`-TimeoutSec` 默认 `90`，控制整场竞速的最长等待时间。`-NoCache` 会同时跳过缓存读取和写入。
@@ -147,10 +149,10 @@ OCR: baidu-ocr -> windows-ocr -> vision reasoning
 
 可以接入任意 OpenAI-compatible 视觉模型：
 
-```powershell
-scripts\setup.ps1 -SetCustom -Slot 1 -BaseUrl <url> -Key <key> -Model <model> -Verify
-scripts\setup.ps1 -SetCustom -Slot 2 -BaseUrl <url> -Key <key> -Model <model> -Verify
-scripts\setup.ps1 -SetCustom -Slot 3 -BaseUrl <url> -Key <key> -Model <model> -Verify
+```cmd
+scripts\setup.cmd -SetCustom -Slot 1 -BaseUrl "https://example.com/v1/chat/completions" -Key "YOUR_API_KEY" -Model "YOUR_MODEL" -Verify
+scripts\setup.cmd -SetCustom -Slot 2 -BaseUrl "https://example.com/v1/chat/completions" -Key "YOUR_API_KEY" -Model "YOUR_MODEL" -Verify
+scripts\setup.cmd -SetCustom -Slot 3 -BaseUrl "https://example.com/v1/chat/completions" -Key "YOUR_API_KEY" -Model "YOUR_MODEL" -Verify
 ```
 
 免费竞速池全部失败后，router 才会按顺序尝试这些槽位。
@@ -193,16 +195,16 @@ scripts\setup.ps1 -SetCustom -Slot 3 -BaseUrl <url> -Key <key> -Model <model> -V
 4. 修改脚本后运行预检或冒烟测试。
 
 ```powershell
-scripts\preflight.ps1
-scripts\smoke-test.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\preflight.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\smoke-test.ps1
 ```
 
 ## 更新
 
 ```powershell
-scripts\check-update.ps1
-scripts\check-update.ps1 -Notify
-scripts\update-skill.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\check-update.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\check-update.ps1 -Notify
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\update-skill.ps1
 ```
 
 本地安装是本地副本，不会自动跟随 GitHub 更新。

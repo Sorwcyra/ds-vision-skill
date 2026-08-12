@@ -44,16 +44,18 @@ scripts\local-select.ps1 -Force
 
 ## 配置命令
 
-```powershell
-scripts\setup.ps1 -Status
-scripts\setup.ps1 -Help
-scripts\setup.ps1 -SetKey -Channel glm -Key <key> -Verify
-scripts\setup.ps1 -SetKey -Channel agnes-2.5-flash -Key <key> -Verify
-scripts\setup.ps1 -SetKey -Channel baidu-ocr -Key <ak> -Secret <sk> -Verify
-scripts\setup.ps1 -SetCustom -Slot 1 -BaseUrl <url> -Key <key> -Model <model> -Verify
-scripts\setup.ps1 -SetCustom -Slot 2 -BaseUrl <url> -Key <key> -Model <model> -Verify
-scripts\setup.ps1 -SetCustom -Slot 3 -BaseUrl <url> -Key <key> -Model <model> -Verify
-scripts\setup.ps1 -RemoveKey -Channel <name|custom>
+这些命令可以在 PowerShell 或默认 `cmd.exe` 的 harness 中运行。`cmd.exe` 会把 `<KEY>` 当成重定向符号，因此可复制示例使用带引号的占位值。
+
+```cmd
+scripts\setup.cmd -Status
+scripts\setup.cmd -Help
+scripts\setup.cmd -SetKey -Channel glm -Key "YOUR_GLM_API_KEY" -Verify
+scripts\setup.cmd -SetKey -Channel agnes-2.5-flash -Key "YOUR_AGNES_API_KEY" -Verify
+scripts\setup.cmd -SetKey -Channel baidu-ocr -Key "YOUR_BAIDU_API_KEY" -Secret "YOUR_BAIDU_SECRET_KEY" -Verify
+scripts\setup.cmd -SetCustom -Slot 1 -BaseUrl "https://example.com/v1/chat/completions" -Key "YOUR_API_KEY" -Model "YOUR_MODEL" -Verify
+scripts\setup.cmd -SetCustom -Slot 2 -BaseUrl "https://example.com/v1/chat/completions" -Key "YOUR_API_KEY" -Model "YOUR_MODEL" -Verify
+scripts\setup.cmd -SetCustom -Slot 3 -BaseUrl "https://example.com/v1/chat/completions" -Key "YOUR_API_KEY" -Model "YOUR_MODEL" -Verify
+scripts\setup.cmd -RemoveKey -Channel glm
 ```
 
 ## 验证标准
@@ -61,7 +63,7 @@ scripts\setup.ps1 -RemoveKey -Channel <name|custom>
 每个云端视觉通道可用一张小测试图验证：
 
 ```powershell
-scripts\vlm-vision.ps1 -ImagePath <test.png> -Prompt "describe this image in one sentence" -Channel <glm|glm-thinking|agnes-2.5-flash|agnes-2.0-flash|custom-1|custom-2|custom-3>
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\vlm-vision.ps1 -ImagePath "test.png" -Prompt "describe this image in one sentence" -Channel glm
 ```
 
 常见退出码：
